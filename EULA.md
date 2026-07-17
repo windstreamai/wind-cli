@@ -1,6 +1,6 @@
 # End User License Terms — wind
 
-Copyright © 2026 Wind Stream Technologies, Inc. All rights reserved.
+Copyright © 2026 Wind Stream, Inc. All rights reserved.
 
 wind (the binary distributed from this repository) is proprietary software and
 part of the Wind Stream Platform. Your download, installation, and use of it are
