@@ -19,7 +19,7 @@ issues and support: success@windstream.ai.
 **macOS / Linux (Homebrew)**
 
 ```bash
-brew install windstreamai/wind/wind
+brew install windstreamai/tap/wind
 ```
 
 **Windows (winget)**
