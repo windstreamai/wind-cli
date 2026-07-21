@@ -1,4 +1,4 @@
-# wind — the Wind Stream CL
+# wind — the Wind Stream CLI
 
 Binary distribution of **wind**, the Wind Stream CLI. `wind` connects Wind
 Stream workflows to your AI coding tools like Claude Code, Antigravity, and Codex. 
