@@ -36,3 +36,7 @@ MCP, `windstream-*` commands).
 Proprietary — see [EULA.md](EULA.md), governed by the
 [Wind Stream Terms of Service](https://windstream.ai/terms-of-service).
 Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Docs
+
+Full documentation lives in [docs/](docs/README.md) — install, getting started, the command reference, and troubleshooting.
