@@ -7,8 +7,8 @@ wind — Wind Stream CLI
 
 Usage:
   wind up <release> [--create]                  (Create the release branch off origin's default branch)
-  wind up <release> <slug> [--ws <ref>] [--create]   (Open a Wind Stream session in it)
-  wind up current [<slug>]                      (The latest release — slug-less just prints it)
+  wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]   (Open a Wind Stream session in it)
+  wind up current [<slug>]                      (The open release train — slug-less just prints it)
   wind up bump major|minor|patch [<slug>]       (Cut the next release, bumped from the latest)
   wind surf [<topic>]                           (Deliberate with Wind Stream in your terminal)
   wind down [--easy] [--inline]                 (Retrospective for this session, written back)
@@ -28,7 +28,7 @@ Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same block
 
 ```bash
 wind up <release> [--create]
-wind up <release> <slug> [--ws <ref>] [--create]
+wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]
 wind up current [<slug>]
 wind up bump major|minor|patch [<slug>]
 ```
@@ -38,7 +38,10 @@ wind up bump major|minor|patch [<slug>]
 - `<release>` — required. A concrete version, or one of the two aliases below. Resolves to `release/<release>`.
 - `<slug>` — optional. A short name for this piece of work; supplying it switches `wind up` into session mode. Omit it to just ensure the release branch exists (or, with an alias, to query it).
 - `--ws <ref>` — session mode only. Attach a specific, already-existing Wind Stream session instead of letting `/windstream-connect` create a new one.
+- `--gh <issue>` — session mode only. Record the GitHub issue this session is anchored to — the bare number (`94`) or a pasted issue URL, normalized to the number; it lands in the session manifest as `gh_issue`, where downstream tooling can pick it up (e.g. to stamp `Closes #N` on the session's PR). Structural check only — the issue isn't looked up on GitHub, so `wind up` works before the network does.
 - `--create` — create `release/<release>` non-interactively when it doesn't exist yet. At an interactive terminal wind asks first; this is the opt-in for when there's no one to ask.
+
+Don't have a name for the work yet? Leave the slug off and pass a binding flag: `wind up <release> --gh <issue>` (or `--ws <ref>`) fetches the referenced source's title and **proposes a session name** — confirm at the terminal and the session starts under it. Non-interactively wind never guesses: it prints the proposal and the exact re-run command instead. If no title is fetchable (offline, `gh` missing, unresolvable reference), wind says the flags went unused rather than dropping them silently.
 
 In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` — a sibling of your repo, scoped by release so the same slug used across two releases doesn't collide — branched off `release/<release>`, with `.session-state.json` (the session manifest) written at its root.
 
@@ -46,12 +49,12 @@ In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` �
 
 `current` and `bump` name a release relative to what's already shipped, so you don't have to know or type an exact version. Both resolve against one live listing of origin's `release/*` branches and `v*` tags — they're strictly online, and only stable `vMAJOR.MINOR.PATCH` names count (a pre-release with an `-rc.N` suffix is ignored, so bump math never comes from an rc).
 
-- `wind up current [<slug>]` — `current` is the highest stable version that still has a live release branch on origin. Slug-less, it's a query: `wind up current` just prints the resolved version and exits, no fetch beyond the listing, nothing created. Add a slug and it opens a session on that release, same as `wind up <release> <slug>`. If the latest version has already shipped (its release branch is gone, only the tag remains), `current` refuses and points you at `bump` instead.
+- `wind up current [<slug>]` — `current` is the open release train: the release branch whose version has no matching tag on origin yet. The tag is the ship marker — shipped release branches may linger on origin, and they don't count. Slug-less, it's a query: `wind up current` just prints the resolved version and exits, no fetch beyond the listing, nothing created. Add a slug and it opens a session on that release, same as `wind up <release> <slug>`. `current` refuses rather than guesses: if the latest version has shipped (its tag exists) it points you at `bump`; if more than one train is open above everything shipped (an early cut), it lists them and asks for a concrete version; an open branch below a shipped version is stale — it never answers, and never blocks the live train.
 - `wind up bump major|minor|patch [<slug>]` — resolves the latest stable version the same way, then reports the next one bumped by that level (`major` → `x+1.0.0`, `minor` → `x.y+1.0`, `patch` → `x.y.z+1`) and treats it exactly like `wind up <that-version>`: if the bumped release branch doesn't exist yet (the normal case — you're cutting it), wind creates and pushes it under the same confirm-or-`--create` gate as the concrete form. A slug opens a session there; slug-less just cuts (or confirms) the release.
 - Typing the bump level bare (`wind up major`) doesn't guess — it redirects you to the real grammar (`did you mean: wind up bump major?`) rather than silently doing something else.
 - Both aliases need the network to resolve (they list origin first); if origin can't be reached, `wind up` says so and asks you to pass a concrete version instead.
 
-Exit: 1 with a usage line for bad arguments, an invalid release name, running outside a git repo, an unresolvable release with no `--create` at a non-interactive terminal, a worktree that already has a live session in it, or (aliases) origin being unreachable or `current` finding no release branch left to attach to. Declining the create prompt isn't an error — that exits 0. In release-only mode, success (the release already existed, or was just created) exits 0; the `current` query form (no slug) also exits 0 after printing the resolved version. In session mode, once the worktree and manifest are ready, `wind up` hands off to Claude Code and exits with that session's own exit code.
+Exit: 1 with a usage line for bad arguments, an invalid release name, running outside a git repo, an unresolvable release with no `--create` at a non-interactive terminal, a worktree that already has a live session in it, or (aliases) origin being unreachable or `current` refusing (latest shipped, multiple open trains, or a stale open branch). Declining the create prompt isn't an error — that exits 0. In release-only mode, success (the release already existed, or was just created) exits 0; the `current` query form (no slug) also exits 0 after printing the resolved version. In session mode, once the worktree and manifest are ready, `wind up` hands off to Claude Code and exits with that session's own exit code.
 
 ## wind surf
 
@@ -171,6 +174,6 @@ Exit: always 0.
 
 You don't run these — wind's own hooks and the `/windstream-connect` command do. Documented here for completeness, and because `wind trace` is genuinely useful to reach for yourself when you want to see what a run actually did.
 
-- **`wind hook <session-start|session-end>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin, writes the session binding at start, and uploads (or spools, if Wind Stream is unreachable) the session trace at end. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails.
+- **`wind hook <session-start|session-end|retro-drain>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin, writes the session binding at start, and uploads (or spools, if Wind Stream is unreachable) the session trace at end. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
 - **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
 - **`wind trace [--run <id>] [--json]`** — inspect wind's own trace output: the events each `wind` invocation logs while it runs. Bare `wind trace` prints the most recent run, pretty-printed; `--run <id>` picks an older one by matching its filename; `--json` prints raw JSON lines instead of the pretty form. Exits 0, or 1 if `--run <id>` matches nothing or an unknown flag is passed.

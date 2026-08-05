@@ -30,9 +30,9 @@ If `release/<release>` doesn't exist yet, wind creates and pushes it first — w
 wind up <release> [--create]
 ```
 
-Add `--ws <ref>` to attach a specific, already-existing Wind Stream session instead of letting `/windstream-connect` create a new one.
+Add `--ws <ref>` to attach a specific, already-existing Wind Stream session instead of letting `/windstream-connect` create a new one. Add `--gh <issue>` to record the GitHub issue the session is anchored to in the session manifest — the bare number or a pasted issue URL both work. No name for the work yet? Leave the slug off: with `--ws`/`--gh`, wind fetches the source and proposes one.
 
-`wind up current <slug>` starts a session on the latest release, and `wind up bump patch <slug>` cuts the next one and starts there — so you don't have to look up or type an exact version; see [the command reference](commands.md#wind-up) for the full alias grammar.
+`wind up current <slug>` starts a session on the open release train, and `wind up bump patch <slug>` cuts the next one and starts there — so you don't have to look up or type an exact version; see [the command reference](commands.md#wind-up) for the full alias grammar.
 
 ## During the work
 
