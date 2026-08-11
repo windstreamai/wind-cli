@@ -34,6 +34,8 @@ Add `--ws <ref>` to attach a specific, already-existing Wind Stream session inst
 
 `wind up current <slug>` starts a session on the open release train, and `wind up bump patch <slug>` cuts the next one and starts there — so you don't have to look up or type an exact version; see [the command reference](commands.md#wind-up) for the full alias grammar.
 
+Work that isn't on a release train has its own form: `wind up feature <slug>` opens the same kind of session off your repo's default branch — branch `feature/<slug>`, no release involved — and `wind up continue <slug>` reopens that branch later in a fresh worktree. Starting a feature works offline; `continue` does too, once the branch is local; see [Feature sessions](commands.md#feature-sessions-feature-and-continue).
+
 ## During the work
 
 Deliberate with Wind Stream from your terminal, any time:
@@ -46,6 +48,14 @@ It opens a full-screen terminal UI (TUI) — continuing an existing Wind Stream 
 
 Inside Claude Code itself, the same reach is available through the `windstream-*` slash commands that `wind setup` deployed there — `/windstream-connect` is the one that opened this session in the first place.
 
+Want the session in your browser instead of the terminal? From anywhere in the worktree:
+
+```bash
+wind open
+```
+
+opens the Wind Stream session this work is attached to — it reads the session manifest, so you never have to fish the URL out of a file. Where a browser can't appear (SSH, CI), `wind open --print` prints the URL instead, ready to paste.
+
 ## Close the loop: wind down
 
 ```bash
@@ -56,7 +66,7 @@ opens the same kind of full-screen conversation, framed as a retrospective — W
 
 You don't have to run it, though: the SessionEnd hook returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not. Running `wind down` adds your own account of the work on top of that trace — it doesn't replace it.
 
-`wind down --easy` skips the interview for a quick auto summary instead — you just approve or edit it.
+`wind down --easy` skips the interview for a quick auto summary instead — you just approve or edit it. For non-interactive runs (CI, scripts), add `--yes` to record that summary without asking, or `--message <text>` to record your own words verbatim instead (the argument is the retrospective — supplying it is the approval; for a file-backed one, `--message "$(cat retro.md)"`) — `wind down --easy` needs one of the two off a terminal, or it refuses rather than hang. A clean exit either way means your words are saved for good, whether delivered right away or spooled to sync on a later session start.
 
 ## Not in a wind worktree?
 

@@ -10,10 +10,16 @@ Usage:
   wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]   (Open a Wind Stream session in it)
   wind up current [<slug>]                      (The open release train — slug-less just prints it)
   wind up bump major|minor|patch [<slug>]       (Cut the next release, bumped from the latest)
+  wind up feature <slug> [--ws <ref>] [--gh <issue>]  (Start a local feature session off the default branch)
+  wind up continue <slug> [--ws <ref>] [--gh <issue>] (Reopen an existing feature/<slug> in a fresh worktree)
   wind surf [<topic>]                           (Deliberate with Wind Stream in your terminal)
-  wind down [--easy] [--inline]                 (Retrospective for this session, written back)
+  wind down [--easy] [--inline] [--yes] [--message <text>]   (Retrospective for this session, written back)
       --easy    quick auto summary, approve/edit it (skips the interview)
       --inline  line-by-line rendering, no full-screen takeover (run it inside Claude Code)
+      --yes     with --easy: record the generated summary without prompting
+      --message with --easy: record the given text verbatim — supplying it implies acceptance
+  wind open [--print]                           (Open this session's Wind Stream page in the browser)
+      --print   print the URL instead of opening it
   wind connect <ws-session-ref> [--url <url>]   (Connect this repo to a Wind Stream session)
   wind setup                                    (Set up wind on this machine)
   wind auth <login|status|logout>               (Manage your Wind Stream token)
@@ -31,9 +37,13 @@ wind up <release> [--create]
 wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]
 wind up current [<slug>]
 wind up bump major|minor|patch [<slug>]
+wind up feature <slug> [--ws <ref>] [--gh <issue>]
+wind up continue <slug> [--ws <ref>] [--gh <issue>]
 ```
 
-`wind up` has two forms. `wind up <release>` just makes sure `release/<release>` exists — if it doesn't, wind creates it off the repo's default branch on the remote and pushes it (with a confirm prompt at an interactive terminal, or immediately with `--create`, which is what you need non-interactively — CI, scripts). Add a `<slug>` and it opens a session instead: wind creates a worktree off `release/<release>`, writes the session manifest into it, and launches Claude Code there, straight into `/windstream-connect` — the command that attaches to (or creates) the Wind Stream session behind the work.
+`wind up` opens work in one of two worlds: on a **release train** (`wind up <release> …`, the forms documented first below) or **off the default branch** (`wind up feature …` / `wind up continue …`, [Feature sessions](#feature-sessions-feature-and-continue)). Everything after the worktree is created is the same in both: the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down`.
+
+In release mode, `wind up` has two forms. `wind up <release>` just makes sure `release/<release>` exists — if it doesn't, wind creates it off the repo's default branch on the remote and pushes it (with a confirm prompt at an interactive terminal, or immediately with `--create`, which is what you need non-interactively — CI, scripts). Add a `<slug>` and it opens a session instead: wind creates a worktree off `release/<release>`, writes the session manifest into it, and launches Claude Code there, straight into `/windstream-connect` — the command that attaches to (or creates) the Wind Stream session behind the work.
 
 - `<release>` — required. A concrete version, or one of the two aliases below. Resolves to `release/<release>`.
 - `<slug>` — optional. A short name for this piece of work; supplying it switches `wind up` into session mode. Omit it to just ensure the release branch exists (or, with an alias, to query it).
@@ -56,6 +66,30 @@ In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` �
 
 Exit: 1 with a usage line for bad arguments, an invalid release name, running outside a git repo, an unresolvable release with no `--create` at a non-interactive terminal, a worktree that already has a live session in it, or (aliases) origin being unreachable or `current` refusing (latest shipped, multiple open trains, or a stale open branch). Declining the create prompt isn't an error — that exits 0. In release-only mode, success (the release already existed, or was just created) exits 0; the `current` query form (no slug) also exits 0 after printing the resolved version. In session mode, once the worktree and manifest are ready, `wind up` hands off to Claude Code and exits with that session's own exit code.
 
+### Feature sessions: `feature` and `continue`
+
+```bash
+wind up feature <slug> [--ws <ref>] [--gh <issue>]
+wind up feature [--ws <ref>] [--gh <issue>]
+wind up continue <slug> [--ws <ref>] [--gh <issue>]
+```
+
+Not every piece of work rides a release train. `wind up feature <slug>` opens a session off the repo's default branch instead: branch `feature/<slug>`, worktree at `../worktrees/<repo>-feature-<slug>`, and a manifest with no release in it. Everything downstream is unchanged — the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down`. `feature` and `continue` are reserved words in the `<release>` position, the same way `current` and `bump` are, so a release can't be named either of them.
+
+- `<slug>` — the name of the work; it becomes the branch (`feature/dark-mode`), the worktree directory, and the session title. Leave it off and pass `--ws <ref>` or `--gh <issue>` and wind proposes a name from that source's title, exactly as release mode does (confirm at the terminal; non-interactively it prints the proposal and the exact re-run instead of guessing). Bare `wind up feature` — no slug, no flags — has nothing to name the work from and is a usage error: `usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`.
+- `--ws <ref>` / `--gh <issue>` — carry over from release mode unchanged, and land in the manifest the same way.
+- `--create` doesn't apply here and is refused rather than ignored: `--create doesn't apply to feature mode — nothing is pushed to origin`. Feature mode pushes nothing to origin — the branch is local until you push it yourself.
+
+**Starting works offline.** wind picks the base in three steps and tells you which one answered before it creates anything (`feature dark-mode -> base main (origin default)`): origin's default branch when origin is reachable, else the cached `origin/HEAD` from your last fetch (`cached origin HEAD — offline`), else local `main` (`local main — no origin`). If none of the three resolves, that's a named error — nothing is created.
+
+**The name has to be free.** Before creating anything, wind checks the branch name against local, cached-remote, and (when origin is reachable) live origin refs. Taken exactly, it refuses and points at the recovery: `feature/dark-mode already exists — yours? wind up continue dark-mode; otherwise pick another slug`. Taken as a prefix — git can't have both a `feature/dark-mode` branch and `feature/dark-mode/*` branches — it refuses too: `feature/dark-mode collides with existing feature/dark-mode/* branches — pick another slug`. Either way nothing is created; pick another slug, or `continue` the branch that's already there.
+
+`wind up continue <slug>` is the other half: it reopens an existing `feature/<slug>` in a fresh worktree — local if it's there, tracked from origin if it only exists there. No branch is created and no ref is minted; you get a fresh worktree, a fresh manifest, and a fresh session that re-attaches to the same Wind Stream session by title. Nothing to reopen is a named error (`feature/dark-mode not found locally or on origin — wind up feature dark-mode to start it`), and so is a branch that's already checked out somewhere else (`feature/dark-mode is already checked out at <path> — cd in to resume`).
+
+Because an offline `wind up feature` can only check the refs it can see, connect re-checks origin once: if `feature/<slug>` turns out to exist on origin **and** that origin branch has diverged from yours (it isn't an ancestor of your local branch — a genuinely different branch wearing the same name), you get a non-fatal warning with the recovery: `warning: feature/dark-mode already exists on origin and this session's branch diverges from it — yours? you likely wanted wind up continue dark-mode. not yours? rename before pushing: git branch -m <new>`. A `continue` session, or a local branch that's simply ahead of origin, is not a divergence and stays silent — as does a check wind can't settle. The prefix case warns whenever it's found: `warning: feature/dark-mode collides with feature/dark-mode/* branches on origin — rename before pushing: git branch -m <new>`. Warnings only — your local work already exists, so wind never blocks on them.
+
+Exit: 1 with a usage line for bad arguments (`usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`, `usage: wind up continue <slug>`), for `--create`, for a slug that collides, for a slug that normalizes to nothing, for no resolvable base, for running outside a git repo, or for a worktree that already has a live session in it — plus, for `continue`, a target that doesn't exist or is checked out elsewhere. Otherwise `wind up` hands off to Claude Code and exits with that session's own exit code.
+
 ## wind surf
 
 ```bash
@@ -73,17 +107,31 @@ Exit: 1 if you're not authenticated (run `wind auth login` first), or with a usa
 ## wind down
 
 ```bash
-wind down [--easy] [--inline]
+wind down [--easy] [--inline] [--yes] [--message <text>]
 ```
 
 `wind down` opens the same kind of full-screen conversation as `wind surf`, framed as a retrospective for this session: Wind Stream asks what happened, you tell it straight, and the exchange writes back to the Wind Stream session this worktree is attached to. Type `/exit` when you're done. You don't have to run it — the SessionEnd hook already returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not; running it adds your own account on top of that trace, it doesn't replace it.
 
 - `--easy` — skip the interview. Wind Stream generates a short, accurate summary of the commits on this branch up front; you approve it as-is, edit it before it's recorded, or cancel and write nothing. At most one write, and it's yours to sign off on either way.
 - `--inline` — render line by line instead of taking over the full screen. For running `wind down` inside another tool's own terminal (a Claude Code session, say), where a full-screen takeover would fight with the surrounding UI.
+- `--yes` — with `--easy`, record the generated summary without prompting: no approve/edit/cancel menu, it just writes. Needs `--easy` — the full interview has no single summary for a flag to approve on your behalf.
+- `--message <text>` — with `--easy`, skip the generated summary too: the argument itself is your retrospective, recorded verbatim (whitespace and all). There's no approve step because there's nothing to approve — you wrote the words, and supplying them is the acceptance. Also needs `--easy`. For a retrospective you keep in a file, let the shell hand the text over: `wind down --easy --message "$(cat retro.md)"`, or `--message "$(cat)"` to type/pipe it in. wind never treats the argument as a path, so a value that looks like a flag (`--message --yes`) or a bare `-` is refused up front rather than recorded as your words.
 
-`--easy` and `--inline` are strictly orthogonal — one picks what gets generated (a quick summary instead of the interview), the other picks how it's drawn (line-by-line instead of full-screen). Either flag works with or without the other.
+`--easy` and `--inline` are strictly orthogonal — one picks what gets generated (a quick summary instead of the interview), the other picks how it's drawn (line-by-line instead of full-screen). Either flag works with or without the other. `--yes` and `--message` both let the `--easy` path run unattended (CI, scripts) instead of waiting on a menu nobody is there to answer — `--yes` is the approval you'd have typed at that menu, `--message` skips the menu entirely by supplying the retrospective itself.
 
-Exit: 1 if you're not authenticated (run `wind auth login` first), or with a usage line if you pass a flag other than `--easy`/`--inline`. 0 otherwise — including when this worktree isn't attached to a Wind Stream session at all, in which case `wind down` says so and exits without opening the TUI.
+Exit: 1 if you're not authenticated (run `wind auth login` first), with a usage line for an unrecognized flag, for `--yes`/`--message` without `--easy`, or for a `--message` value that looks like a flag or is a bare `-`. `wind down --easy` also exits 1 at a non-interactive terminal if you give it neither `--yes` nor `--message` — it refuses up front rather than hang waiting on a menu that will never get an answer. Otherwise 0: a deliberate cancel writes nothing and exits 0, same as a worktree with no Wind Stream session attached (`wind down` says so and returns without opening the TUI) — unless the ask was non-interactive (`--yes` or `--message`), in which case asking to record with nothing to record into is a 1. With `--easy --yes` or `--message`, exit 0 means your words are durably saved — delivered right away, or spooled to sync on a later session start if Wind Stream can't be reached right now (offline, or your token needs a refresh); the one other 1 is a save that fails everywhere, locally and on Wind Stream both.
+
+## wind open
+
+```bash
+wind open [--print]
+```
+
+`wind open` opens the Wind Stream session this worktree is attached to in your browser — the "take me there" verb for when you're beside the session, not in it. It resolves the target from the session manifest: the exact URL recorded when the session was bound, or, for a manifest bound before URLs were recorded, the session id plus your Wind Stream host. Either way it echoes the URL it's opening, so even a box where no browser window can appear still shows you the link.
+
+- `--print` — print the bare URL instead of opening a browser, nothing else on the line. For terminals where a browser can't reach you (SSH, CI), or for pasting the link somewhere.
+
+Exit: 1 with a usage line for anything other than `--print`, if there's no session manifest here (run `wind up` or `wind connect` first), or if the manifest has no Wind Stream session bound yet (run `/windstream-connect` in your coding session to attach one). Otherwise 0 — with `--print` that means the URL was printed; without it, that the URL was handed to your system's opener (wind can't see whether a window actually appeared).
 
 ## wind connect
 
@@ -174,6 +222,6 @@ Exit: always 0.
 
 You don't run these — wind's own hooks and the `/windstream-connect` command do. Documented here for completeness, and because `wind trace` is genuinely useful to reach for yourself when you want to see what a run actually did.
 
-- **`wind hook <session-start|session-end|retro-drain>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin, writes the session binding at start, and uploads (or spools, if Wind Stream is unreachable) the session trace at end. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
-- **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
+- **`wind hook <session-start|session-end|retro-drain>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. At session end, uploads (or spools, if Wind Stream is unreachable) the session trace. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
+- **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
 - **`wind trace [--run <id>] [--json]`** — inspect wind's own trace output: the events each `wind` invocation logs while it runs. Bare `wind trace` prints the most recent run, pretty-printed; `--run <id>` picks an older one by matching its filename; `--json` prints raw JSON lines instead of the pretty form. Exits 0, or 1 if `--run <id>` matches nothing or an unknown flag is passed.
