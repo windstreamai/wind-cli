@@ -36,6 +36,8 @@ Add `--ws <ref>` to attach a specific, already-existing Wind Stream session inst
 
 Work that isn't on a release train has its own form: `wind up feature <slug>` opens the same kind of session off your repo's default branch — branch `feature/<slug>`, no release involved — and `wind up continue <slug>` reopens that branch later in a fresh worktree. Starting a feature works offline; `continue` does too, once the branch is local; see [Feature sessions](commands.md#feature-sessions-feature-and-continue).
 
+Reviewing someone else's PR has its own form too: `wind up review --gh <pr-url|number> [<slug>]` cuts a `review/<slug>` seat on the PR's head, with the PR recorded as the manifest's anchor. This one needs the network up front, like the `current`/`bump` aliases — it's fetching the PR from GitHub; see [Review sessions](commands.md#review-sessions-review).
+
 ## During the work
 
 Deliberate with Wind Stream from your terminal, any time:

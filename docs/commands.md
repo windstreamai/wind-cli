@@ -12,12 +12,14 @@ Usage:
   wind up bump major|minor|patch [<slug>]       (Cut the next release, bumped from the latest)
   wind up feature <slug> [--ws <ref>] [--gh <issue>]  (Start a local feature session off the default branch)
   wind up continue <slug> [--ws <ref>] [--gh <issue>] (Reopen an existing feature/<slug> in a fresh worktree)
+  wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]  (Cut a review seat on a PR's head, anchored in the manifest)
   wind surf [<topic>]                           (Deliberate with Wind Stream in your terminal)
   wind down [--easy] [--inline] [--yes] [--message <text>]   (Retrospective for this session, written back)
       --easy    quick auto summary, approve/edit it (skips the interview)
       --inline  line-by-line rendering, no full-screen takeover (run it inside Claude Code)
       --yes     with --easy: record the generated summary without prompting
       --message with --easy: record the given text verbatim — supplying it implies acceptance
+  wind eval publish <file>                      (Publish an eval envelope NDJSON file to Wind Stream)
   wind open [--print]                           (Open this session's Wind Stream page in the browser)
       --print   print the URL instead of opening it
   wind connect <ws-session-ref> [--url <url>]   (Connect this repo to a Wind Stream session)
@@ -39,9 +41,10 @@ wind up current [<slug>]
 wind up bump major|minor|patch [<slug>]
 wind up feature <slug> [--ws <ref>] [--gh <issue>]
 wind up continue <slug> [--ws <ref>] [--gh <issue>]
+wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
 ```
 
-`wind up` opens work in one of two worlds: on a **release train** (`wind up <release> …`, the forms documented first below) or **off the default branch** (`wind up feature …` / `wind up continue …`, [Feature sessions](#feature-sessions-feature-and-continue)). Everything after the worktree is created is the same in both: the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down`.
+`wind up` opens work in one of three worlds: on a **release train** (`wind up <release> …`, the forms documented first below), **off the default branch** (`wind up feature …` / `wind up continue …`, [Feature sessions](#feature-sessions-feature-and-continue)), or **on a PR's head for review** (`wind up review …`, [Review sessions](#review-sessions-review)). Everything after the worktree is created is the same across all three — the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down` — except review seats differ; see the Review sessions caveat below.
 
 In release mode, `wind up` has two forms. `wind up <release>` just makes sure `release/<release>` exists — if it doesn't, wind creates it off the repo's default branch on the remote and pushes it (with a confirm prompt at an interactive terminal, or immediately with `--create`, which is what you need non-interactively — CI, scripts). Add a `<slug>` and it opens a session instead: wind creates a worktree off `release/<release>`, writes the session manifest into it, and launches Claude Code there, straight into `/windstream-connect` — the command that attaches to (or creates) the Wind Stream session behind the work.
 
@@ -90,6 +93,25 @@ Because an offline `wind up feature` can only check the refs it can see, connect
 
 Exit: 1 with a usage line for bad arguments (`usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`, `usage: wind up continue <slug>`), for `--create`, for a slug that collides, for a slug that normalizes to nothing, for no resolvable base, for running outside a git repo, or for a worktree that already has a live session in it — plus, for `continue`, a target that doesn't exist or is checked out elsewhere. Otherwise `wind up` hands off to Claude Code and exits with that session's own exit code.
 
+### Review sessions: `review`
+
+```bash
+wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
+```
+
+`wind up review` opens a session anchored to an existing GitHub pull request instead of a slug you pick yourself: branch `review/<number>-<title>`, worktree at `../worktrees/<repo>-review-<slug>`, and the PR recorded in the session manifest so the session opens already knowing what it's reviewing. This form needs the network up front, like the `current`/`bump` aliases — it fetches the PR's details and head from GitHub before creating anything.
+
+- `--gh <pr-url|number>` — required. A pasted PR URL (`https://github.com/acme/app/pull/907`) or a bare PR number (same-repo by construction — a bare number trusts the checkout you're standing in). A URL for a different repo is refused: `PR #907 belongs to acme/app, but this checkout is dan/app-fork — cd into the acme/app checkout and re-run`.
+- `<slug>` — optional. Overrides the name half only; the branch always keeps the PR number as a prefix (`wind up review --gh 907 my-fix` → `review/907-my-fix`), so two reviews of the same PR can never collide and the PR stays identifiable from the branch name alone. Leave it off and wind proposes `<number>-<title>` from the PR's own title, confirming at the terminal — non-interactively it proceeds and logs what it derived instead of asking, since the name is a pure function of the PR and there's nothing to double-check by re-running.
+- `--ws <ref>` — carries over unchanged, same as everywhere else.
+- `--create` doesn't apply here either and is refused: `--create doesn't apply to review mode — nothing is pushed to origin`.
+
+A PR that doesn't exist, that GitHub can't be reached to check, or that's already merged or closed is refused by name before anything is created: `PR #907 not found — check the number against the repo you're in`; `review needs the network — couldn't fetch PR #907 from GitHub` (plus a `gh` readiness hint naming the cause); `PR #907 is merged — review seats anchor open PRs`. The branch name has to be free the same way a feature branch does: taken and checked out elsewhere → `review/907-my-fix is already checked out at <path> — cd in to resume the seat`; taken with no worktree → `review/907-my-fix already exists — if it's yours locally, delete it (git branch -D review/907-my-fix) to re-cut the seat; if it only exists on origin, pick another slug`; taken as a prefix → `review/907-my-fix collides with existing review/907-my-fix/* branches — pick another slug`.
+
+Exit: 1 with a usage line for bad arguments, for a missing or unparseable `--gh` value, for `--create`, for a cross-repo PR URL, an unreachable network, a PR that's missing/merged/closed, or a branch-name collision — every refusal creates nothing. Declining the terminal confirm isn't an error — that exits 0, same as everywhere else in `wind up`. Otherwise `wind up` hands off to Claude Code and exits with that session's own exit code.
+
+**`wind down` is not yet review-aware:** its summary reads the branch's commits, which on a review seat are the reviewed PR author's — review-aware wind-down is planned.
+
 ## wind surf
 
 ```bash
@@ -120,6 +142,20 @@ wind down [--easy] [--inline] [--yes] [--message <text>]
 `--easy` and `--inline` are strictly orthogonal — one picks what gets generated (a quick summary instead of the interview), the other picks how it's drawn (line-by-line instead of full-screen). Either flag works with or without the other. `--yes` and `--message` both let the `--easy` path run unattended (CI, scripts) instead of waiting on a menu nobody is there to answer — `--yes` is the approval you'd have typed at that menu, `--message` skips the menu entirely by supplying the retrospective itself.
 
 Exit: 1 if you're not authenticated (run `wind auth login` first), with a usage line for an unrecognized flag, for `--yes`/`--message` without `--easy`, or for a `--message` value that looks like a flag or is a bare `-`. `wind down --easy` also exits 1 at a non-interactive terminal if you give it neither `--yes` nor `--message` — it refuses up front rather than hang waiting on a menu that will never get an answer. Otherwise 0: a deliberate cancel writes nothing and exits 0, same as a worktree with no Wind Stream session attached (`wind down` says so and returns without opening the TUI) — unless the ask was non-interactive (`--yes` or `--message`), in which case asking to record with nothing to record into is a 1. With `--easy --yes` or `--message`, exit 0 means your words are durably saved — delivered right away, or spooled to sync on a later session start if Wind Stream can't be reached right now (offline, or your token needs a refresh); the one other 1 is a save that fails everywhere, locally and on Wind Stream both.
+
+## wind eval
+
+```bash
+wind eval publish <file>
+```
+
+`wind eval publish` ships an eval-envelope NDJSON file to Wind Stream — eval results your harness wrote, one JSON event per line (`eval.charter`, `eval.run`, `eval.score`), delivered on the same lane wind's own traces ride, under the same stored token. What wind adds over a raw POST is provenance: each `eval.run` line is stamped with where the run came from — the bound Wind Stream session, branch, commit, release, repo, the git user as actor, the lane (`local` at a terminal, `ci` otherwise), and `wind-cli` as the runner. Stamping is fill-absent: a value the file already carries always wins, so a CI sender's own stamps are never overwritten — and every other line reaches Wind Stream byte-exact; wind parses only what it stamps. What it can't stamp it names rather than drops silently — `provenance absent: ws_session_id (no wind manifest)` — and publishes anyway: absent is valid, silent isn't. You don't need to be in a wind worktree, or even a git repo — each provenance field degrades independently.
+
+- `<file>` — required. The envelope file: every non-blank line a JSON object, with exactly one eval family across its `eval.charter`/`eval.run` lines. A malformed line, a missing or mixed family, or a family that isn't slug-shaped is refused by name before anything is sent — as is a file over the pipe's limits (5,000 events, 8 MB), which needs splitting first.
+
+Delivery is honest about which lane you're on. At an interactive terminal, a Wind Stream that can't be reached — offline, a server error, or a token that's missing, expired, or rejected — spools the batch under `~/.windstream/spools/evals/` and says so: `spooled, not delivered (<reason>)`, pending until the eval spool drain ships (tracked as windstream#943). Non-interactively (CI) there is no "pending": transient failures get a bounded number of synchronous retries and then fail hard, so a CI box is either delivered or failed — never left holding a batch its lifecycle can't flush.
+
+Exit: 1 with a usage line for bad arguments; for an unreadable or malformed file, a missing/mixed/malformed family, or a file over the batch limits; when the pipe rejects the batch or any event in it (each failed event is itemized by line); when the acknowledgment doesn't reconcile as durable (reported, and treated as not delivered); and, non-interactively, for auth failures or for transient failures once the retries are exhausted. 2 when the batch spooled instead of delivering (interactive lane only) — pending, not lost, but not yet durable either. 0 means durably delivered: Wind Stream acknowledged every event committed.
 
 ## wind open
 
