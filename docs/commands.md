@@ -6,39 +6,41 @@ Every `wind` verb, what it does, its flags, and how it exits. For the guided wal
 wind — Wind Stream CLI
 
 Usage:
-  wind up <release> [--create]                  (Create the release branch off origin's default branch)
-  wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]   (Open a Wind Stream session in it)
-  wind up current [<slug>]                      (The open release train — slug-less just prints it)
-  wind up bump major|minor|patch [<slug>]       (Cut the next release, bumped from the latest)
-  wind up feature <slug> [--ws <ref>] [--gh <issue>]  (Start a local feature session off the default branch)
-  wind up continue <slug> [--ws <ref>] [--gh <issue>] (Reopen an existing feature/<slug> in a fresh worktree)
-  wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]  (Cut a review seat on a PR's head, anchored in the manifest)
-  wind surf [<topic>]                           (Deliberate with Wind Stream in your terminal)
-  wind down [--easy] [--inline] [--yes] [--message <text>]   (Retrospective for this session, written back)
-      --easy    quick auto summary, approve/edit it (skips the interview)
-      --inline  line-by-line rendering, no full-screen takeover (run it inside Claude Code)
-      --yes     with --easy: record the generated summary without prompting
-      --message with --easy: record the given text verbatim — supplying it implies acceptance
-  wind eval publish <file>                      (Publish an eval envelope NDJSON file to Wind Stream)
-  wind open [--print]                           (Open this session's Wind Stream page in the browser)
-      --print   print the URL instead of opening it
-  wind connect <ws-session-ref> [--url <url>]   (Connect this repo to a Wind Stream session)
-  wind setup                                    (Set up wind on this machine)
-  wind auth <login|status|logout>               (Manage your Wind Stream token)
-  wind doctor                                   (Capture diagnostics for a bug report)
-  wind status                                   (Show readiness of installed coding tools)
-  wind --version
+  wind <command> [args]
+
+Core commands
+  up         Open or create a session on a release or feature branch
+  surf       Deliberate with Wind Stream in your terminal
+  down       Write a retrospective for this session
+  open       Open this session's Wind Stream page in the browser
+
+Setup commands
+  setup      Set up wind on this machine
+  auth       Manage your Wind Stream token
+  connect    Connect this repo to a Wind Stream session
+  status     Show readiness of installed coding tools
+  doctor     Capture diagnostics for a bug report
+
+Additional commands
+  bind       Persist the Wind Stream session id to the session manifest
+  eval       Publish an eval envelope to Wind Stream
+  attach     Upload evidence images to the bound Wind Stream session
+  trace      Inspect systrace logs
+
+Learn more
+  wind <command> --help    Show usage and flags for a command
+  wind --version           Show the installed version
 ```
 
-Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same block. An unrecognized command prints `unknown command: <cmd>` followed by the block, and exits 1.
+Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same index. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by Claude Code's lifecycle hooks — but `wind help hook` still documents it.
 
 ## wind up
 
 ```bash
 wind up <release> [--create]
 wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]
-wind up current [<slug>]
-wind up bump major|minor|patch [<slug>]
+wind up current [<slug>] [--ws <ref>] [--gh <issue>]
+wind up bump major|minor|patch [<slug>] [--ws <ref>] [--gh <issue>] [--create]
 wind up feature <slug> [--ws <ref>] [--gh <issue>]
 wind up continue <slug> [--ws <ref>] [--gh <issue>]
 wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
@@ -157,6 +159,22 @@ Delivery is honest about which lane you're on. At an interactive terminal, a Win
 
 Exit: 1 with a usage line for bad arguments; for an unreadable or malformed file, a missing/mixed/malformed family, or a file over the batch limits; when the pipe rejects the batch or any event in it (each failed event is itemized by line); when the acknowledgment doesn't reconcile as durable (reported, and treated as not delivered); and, non-interactively, for auth failures or for transient failures once the retries are exhausted. 2 when the batch spooled instead of delivering (interactive lane only) — pending, not lost, but not yet durable either. 0 means durably delivered: Wind Stream acknowledged every event committed.
 
+## wind attach
+
+```bash
+wind attach <file>... [--session <ref>] [--md]
+```
+
+`wind attach` uploads image evidence — screenshots, diagrams, anything a PR or a retrospective wants to point at — to the Wind Stream session this worktree is bound to. Accepted types are `png`, `jpg`, `jpeg`, `gif`, and `webp`, up to 20MB each (no SVG in v0). Each file that clears the checks gets an `att-*` reference minted by Wind Stream; wind prints that reference, a ready-to-paste markdown link, and the session's URL. The target session resolves the same way the rest of `wind` does: the manifest's `ws_session_id`, falling back to `ws_session`, unless `--session` overrides it.
+
+- `<file>...` — required, one or more. Each is checked independently — extension against the allowlist, size against the 20MB cap, existence and non-emptiness — so a bad file doesn't stop the good ones in the same batch.
+- `--session <ref>` — attach to a specific session instead of the one bound in `.session-state.json`. Works outside a wind worktree entirely — no manifest needed.
+- `--md` — print only the markdown lines, one per uploaded file, nothing else. For piping straight into a PR body or a retrospective note.
+
+The attachment's system of record is Wind Stream, not the printed markdown: the `att-*` reference is the durable pointer, and the markdown line is a **link** to the session, not an inline `![]()` embed — the attachment lives in Wind Stream, and the markdown is a link, not an inline image, because attachment URLs require Wind Stream access. Follow the link to see the image. `wind attach` requires a Wind Stream server with session-scoped attachment upload support — older servers report the failure honestly (404).
+
+Exit: 1 with a usage line for bad arguments; for no session bound anywhere (points at `/windstream-connect`, `wind bind`, or `--session`); for no stored token (`wind auth login`); or if any file in the batch failed. Per-file refusals — unsupported extension, over the 20MB cap, missing, empty — and per-request failures — server error, network error, the server's own oversize/bad-request response (413 is reported with the server's own byte numbers) — are all named without stopping the rest of the batch. A session-level rejection (bad token, session not found, not a contributor on the session) stops the batch outright instead, since retrying the next file against the same broken session is pointless. 0 only when every file in the batch uploaded.
+
 ## wind open
 
 ```bash
@@ -247,16 +265,18 @@ Exit: always 0.
 ## wind --help
 
 ```bash
-wind --help
+wind --help              # the command index reproduced at the top of this reference
+wind <command> --help    # one command's usage and flags
+wind help <command>      # same page, help-verb form
 ```
 
-Prints the usage block reproduced at the top of this reference. `-h`, `help`, and running `wind` with no arguments at all are aliases.
+Bare `wind --help` prints the command index reproduced at the top of this reference; `-h`, `help`, and running `wind` with no arguments at all are aliases. With a command — `wind down --help`, `wind down -h`, `wind help down`, or git-style `wind --help down` — it prints that command's own page: summary, usage grammar, and flags. The flag wins from any position (`wind up feature --help` shows `up`'s page rather than starting a session), and it is intercepted before the command runs, so `--help` can never trigger the command it's asking about.
 
-Exit: always 0.
+Exit: 0, or 1 for help on a command that doesn't exist (`wind help bogus` — the unknown-command path; a flag-shaped token gets `unknown help topic` instead).
 
 ## Plumbing
 
-You don't run these — wind's own hooks and the `/windstream-connect` command do. Documented here for completeness, and because `wind trace` is genuinely useful to reach for yourself when you want to see what a run actually did.
+These are normally run *for* you — wind's own hooks invoke `wind hook`, and `/windstream-connect` runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional commands in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
 
 - **`wind hook <session-start|session-end|retro-drain>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. At session end, uploads (or spools, if Wind Stream is unreachable) the session trace. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
 - **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
