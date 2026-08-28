@@ -17,13 +17,14 @@ Core commands
 Setup commands
   setup      Set up wind on this machine
   auth       Manage your Wind Stream token
+  agent      Set the default coding agent
   connect    Connect this repo to a Wind Stream session
   status     Show readiness of installed coding tools
   doctor     Capture diagnostics for a bug report
 
 Additional commands
   bind       Persist the Wind Stream session id to the session manifest
-  eval       Publish an eval envelope to Wind Stream
+  eval       Publish eval envelopes and build their Outcomes
   attach     Upload evidence images to the bound Wind Stream session
   trace      Inspect systrace logs
 
@@ -32,33 +33,34 @@ Learn more
   wind --version           Show the installed version
 ```
 
-Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same index. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by Claude Code's lifecycle hooks — but `wind help hook` still documents it.
+Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same index. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by coding-agent lifecycle hooks — but `wind help hook` still documents it.
 
 ## wind up
 
 ```bash
 wind up <release> [--create]
-wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create]
-wind up current [<slug>] [--ws <ref>] [--gh <issue>]
-wind up bump major|minor|patch [<slug>] [--ws <ref>] [--gh <issue>] [--create]
-wind up feature <slug> [--ws <ref>] [--gh <issue>]
-wind up continue <slug> [--ws <ref>] [--gh <issue>]
-wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
+wind up <release> <slug> [--ws <ref>] [--gh <issue>] [--create] [--agent <agent>]
+wind up current [<slug>] [--ws <ref>] [--gh <issue>] [--agent <agent>]
+wind up bump major|minor|patch [<slug>] [--ws <ref>] [--gh <issue>] [--create] [--agent <agent>]
+wind up feature <slug> [--ws <ref>] [--gh <issue>] [--agent <agent>]
+wind up continue <slug> [--ws <ref>] [--gh <issue>] [--agent <agent>]
+wind up review --gh <pr-url|number> [<slug>] [--ws <ref>] [--agent <agent>]
 ```
 
-`wind up` opens work in one of three worlds: on a **release train** (`wind up <release> …`, the forms documented first below), **off the default branch** (`wind up feature …` / `wind up continue …`, [Feature sessions](#feature-sessions-feature-and-continue)), or **on a PR's head for review** (`wind up review …`, [Review sessions](#review-sessions-review)). Everything after the worktree is created is the same across all three — the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down` — except review seats differ; see the Review sessions caveat below.
+`wind up` opens work in one of three worlds: on a **release train** (`wind up <release> …`, the forms documented first below), **off the default branch** (`wind up feature …` / `wind up continue …`, [Feature sessions](#feature-sessions-feature-and-continue)), or **on a PR's head for review** (`wind up review …`, [Review sessions](#review-sessions-review)). Everything through worktree and manifest creation is the same across all three; then wind launches the selected coding agent. Review seats differ further; see the Review sessions caveat below.
 
-In release mode, `wind up` has two forms. `wind up <release>` just makes sure `release/<release>` exists — if it doesn't, wind creates it off the repo's default branch on the remote and pushes it (with a confirm prompt at an interactive terminal, or immediately with `--create`, which is what you need non-interactively — CI, scripts). Add a `<slug>` and it opens a session instead: wind creates a worktree off `release/<release>`, writes the session manifest into it, and launches Claude Code there, straight into `/windstream-connect` — the command that attaches to (or creates) the Wind Stream session behind the work.
+In release mode, `wind up` has two forms. `wind up <release>` just makes sure `release/<release>` exists — if it doesn't, wind creates it off the repo's default branch on the remote and pushes it (with a confirm prompt at an interactive terminal, or immediately with `--create`, which is what you need non-interactively — CI, scripts). Add a `<slug>` and it opens a session instead: wind creates a worktree off `release/<release>`, writes the session manifest into it, and launches the selected coding agent there. Claude Code enters `/windstream-connect`; Codex starts with `$windstream-connect`. Either connected path attaches to (or creates) the Wind Stream session behind the work.
 
 - `<release>` — required. A concrete version, or one of the two aliases below. Resolves to `release/<release>`.
 - `<slug>` — optional. A short name for this piece of work; supplying it switches `wind up` into session mode. Omit it to just ensure the release branch exists (or, with an alias, to query it).
 - `--ws <ref>` — session mode only. Attach a specific, already-existing Wind Stream session instead of letting `/windstream-connect` create a new one.
 - `--gh <issue>` — session mode only. Record the GitHub issue this session is anchored to — the bare number (`94`) or a pasted issue URL, normalized to the number; it lands in the session manifest as `gh_issue`, where downstream tooling can pick it up (e.g. to stamp `Closes #N` on the session's PR). Structural check only — the issue isn't looked up on GitHub, so `wind up` works before the network does.
 - `--create` — create `release/<release>` non-interactively when it doesn't exist yet. At an interactive terminal wind asks first; this is the opt-in for when there's no one to ask.
+- `--agent <agent>` — launch `claude`, `codex`, or `antigravity` for this session. It overrides the preference set by `wind agent`; without either, wind defaults to Claude Code for backward compatibility.
 
 Don't have a name for the work yet? Leave the slug off and pass a binding flag: `wind up <release> --gh <issue>` (or `--ws <ref>`) fetches the referenced source's title and **proposes a session name** — confirm at the terminal and the session starts under it. Non-interactively wind never guesses: it prints the proposal and the exact re-run command instead. If no title is fetchable (offline, `gh` missing, unresolvable reference), wind says the flags went unused rather than dropping them silently.
 
-In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` — a sibling of your repo, scoped by release so the same slug used across two releases doesn't collide — branched off `release/<release>`, with `.session-state.json` (the session manifest) written at its root.
+In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` — a sibling of your repo, scoped by release so the same slug used across two releases doesn't collide — branched off `release/<release>`, with `.session-state.json` (the session manifest) written at its root. Run from inside a worktree, `wind up` notices and offers to anchor back to the main checkout (default yes; off a terminal it anchors loudly), so new worktrees stay siblings of the repo instead of nesting under `worktrees/worktrees` — answer `n` to keep the worktree-derived location. The same anchoring guards every form that creates a worktree (`feature`, `continue`, `review` included).
 
 ### Release aliases: `current` and `bump`
 
@@ -69,17 +71,17 @@ In session mode, the worktree lands at `../worktrees/<repo>-<release>-<slug>` �
 - Typing the bump level bare (`wind up major`) doesn't guess — it redirects you to the real grammar (`did you mean: wind up bump major?`) rather than silently doing something else.
 - Both aliases need the network to resolve (they list origin first); if origin can't be reached, `wind up` says so and asks you to pass a concrete version instead.
 
-Exit: 1 with a usage line for bad arguments, an invalid release name, running outside a git repo, an unresolvable release with no `--create` at a non-interactive terminal, a worktree that already has a live session in it, or (aliases) origin being unreachable or `current` refusing (latest shipped, multiple open trains, or a stale open branch). Declining the create prompt isn't an error — that exits 0. In release-only mode, success (the release already existed, or was just created) exits 0; the `current` query form (no slug) also exits 0 after printing the resolved version. In session mode, once the worktree and manifest are ready, `wind up` hands off to Claude Code and exits with that session's own exit code.
+Exit: 1 with a usage line for bad arguments, an invalid release name, running outside a git repo, an unresolvable release with no `--create` at a non-interactive terminal, a worktree that already has a live session in it, or (aliases) origin being unreachable or `current` refusing (latest shipped, multiple open trains, or a stale open branch). Declining the create prompt isn't an error — that exits 0. In release-only mode, success (the release already existed, or was just created) exits 0; the `current` query form (no slug) also exits 0 after printing the resolved version. In session mode, once the worktree and manifest are ready, `wind up` hands off to the selected coding agent and exits with that agent's own exit code.
 
 ### Feature sessions: `feature` and `continue`
 
 ```bash
-wind up feature <slug> [--ws <ref>] [--gh <issue>]
-wind up feature [--ws <ref>] [--gh <issue>]
-wind up continue <slug> [--ws <ref>] [--gh <issue>]
+wind up feature <slug> [--ws <ref>] [--gh <issue>] [--agent <agent>]
+wind up feature [--ws <ref>] [--gh <issue>] [--agent <agent>]
+wind up continue <slug> [--ws <ref>] [--gh <issue>] [--agent <agent>]
 ```
 
-Not every piece of work rides a release train. `wind up feature <slug>` opens a session off the repo's default branch instead: branch `feature/<slug>`, worktree at `../worktrees/<repo>-feature-<slug>`, and a manifest with no release in it. Everything downstream is unchanged — the manifest, the handoff into Claude Code, `/windstream-connect`, the hooks, `wind down`. `feature` and `continue` are reserved words in the `<release>` position, the same way `current` and `bump` are, so a release can't be named either of them.
+Not every piece of work rides a release train. `wind up feature <slug>` opens a session off the repo's default branch instead: branch `feature/<slug>`, worktree at `../worktrees/<repo>-feature-<slug>`, and a manifest with no release in it. The selected coding agent launches in that worktree. `feature` and `continue` are reserved words in the `<release>` position, the same way `current` and `bump` are, so a release can't be named either of them.
 
 - `<slug>` — the name of the work; it becomes the branch (`feature/dark-mode`), the worktree directory, and the session title. Leave it off and pass `--ws <ref>` or `--gh <issue>` and wind proposes a name from that source's title, exactly as release mode does (confirm at the terminal; non-interactively it prints the proposal and the exact re-run instead of guessing). Bare `wind up feature` — no slug, no flags — has nothing to name the work from and is a usage error: `usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`.
 - `--ws <ref>` / `--gh <issue>` — carry over from release mode unchanged, and land in the manifest the same way.
@@ -93,12 +95,12 @@ Not every piece of work rides a release train. `wind up feature <slug>` opens a 
 
 Because an offline `wind up feature` can only check the refs it can see, connect re-checks origin once: if `feature/<slug>` turns out to exist on origin **and** that origin branch has diverged from yours (it isn't an ancestor of your local branch — a genuinely different branch wearing the same name), you get a non-fatal warning with the recovery: `warning: feature/dark-mode already exists on origin and this session's branch diverges from it — yours? you likely wanted wind up continue dark-mode. not yours? rename before pushing: git branch -m <new>`. A `continue` session, or a local branch that's simply ahead of origin, is not a divergence and stays silent — as does a check wind can't settle. The prefix case warns whenever it's found: `warning: feature/dark-mode collides with feature/dark-mode/* branches on origin — rename before pushing: git branch -m <new>`. Warnings only — your local work already exists, so wind never blocks on them.
 
-Exit: 1 with a usage line for bad arguments (`usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`, `usage: wind up continue <slug>`), for `--create`, for a slug that collides, for a slug that normalizes to nothing, for no resolvable base, for running outside a git repo, or for a worktree that already has a live session in it — plus, for `continue`, a target that doesn't exist or is checked out elsewhere. Otherwise `wind up` hands off to Claude Code and exits with that session's own exit code.
+Exit: 1 with a usage line for bad arguments (`usage: wind up feature <slug> [--ws <ref>] [--gh <issue>]`, `usage: wind up continue <slug>`), for `--create`, for a slug that collides, for a slug that normalizes to nothing, for no resolvable base, for running outside a git repo, or for a worktree that already has a live session in it — plus, for `continue`, a target that doesn't exist or is checked out elsewhere. Otherwise `wind up` hands off to the selected coding agent and exits with that agent's own exit code.
 
 ### Review sessions: `review`
 
 ```bash
-wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
+wind up review --gh <pr-url|number> [<slug>] [--ws <ref>] [--agent <agent>]
 ```
 
 `wind up review` opens a session anchored to an existing GitHub pull request instead of a slug you pick yourself: branch `review/<number>-<title>`, worktree at `../worktrees/<repo>-review-<slug>`, and the PR recorded in the session manifest so the session opens already knowing what it's reviewing. This form needs the network up front, like the `current`/`bump` aliases — it fetches the PR's details and head from GitHub before creating anything.
@@ -110,9 +112,23 @@ wind up review --gh <pr-url|number> [<slug>] [--ws <ref>]
 
 A PR that doesn't exist, that GitHub can't be reached to check, or that's already merged or closed is refused by name before anything is created: `PR #907 not found — check the number against the repo you're in`; `review needs the network — couldn't fetch PR #907 from GitHub` (plus a `gh` readiness hint naming the cause); `PR #907 is merged — review seats anchor open PRs`. The branch name has to be free the same way a feature branch does: taken and checked out elsewhere → `review/907-my-fix is already checked out at <path> — cd in to resume the seat`; taken with no worktree → `review/907-my-fix already exists — if it's yours locally, delete it (git branch -D review/907-my-fix) to re-cut the seat; if it only exists on origin, pick another slug`; taken as a prefix → `review/907-my-fix collides with existing review/907-my-fix/* branches — pick another slug`.
 
-Exit: 1 with a usage line for bad arguments, for a missing or unparseable `--gh` value, for `--create`, for a cross-repo PR URL, an unreachable network, a PR that's missing/merged/closed, or a branch-name collision — every refusal creates nothing. Declining the terminal confirm isn't an error — that exits 0, same as everywhere else in `wind up`. Otherwise `wind up` hands off to Claude Code and exits with that session's own exit code.
+Exit: 1 with a usage line for bad arguments, for a missing or unparseable `--gh` value, for `--create`, for a cross-repo PR URL, an unreachable network, a PR that's missing/merged/closed, or a branch-name collision — every refusal creates nothing. Declining the terminal confirm isn't an error — that exits 0, same as everywhere else in `wind up`. Otherwise `wind up` hands off to the selected coding agent and exits with that agent's own exit code.
 
 **`wind down` is not yet review-aware:** its summary reads the branch's commits, which on a review seat are the reviewed PR author's — review-aware wind-down is planned.
+
+## wind agent
+
+```bash
+wind agent claude|codex|antigravity
+```
+
+Sets the coding agent that `wind up` launches when that command has no explicit `--agent` flag. The preference is stored in `~/.windstream/config.json`; existing installs with no preference continue to use Claude Code. An invocation-level flag always wins, for example `wind up feature mcp-bridge --agent codex`.
+
+Claude Code keeps its named `/windstream-connect` launch. Codex (`codex`) receives the stored Wind token only in its child-process environment, then starts with `$windstream-connect`; selecting Codex with no stored Wind credential refuses up front — before any branch or worktree is created — with a pointer at `wind auth login`. After Codex exits, wind consumes the hook's trace-ready notification and uploads the durable spool; traces spooled without a bound Wind Stream session are named loudly (count and reason) rather than promised a retry no drain can deliver. Antigravity (`agy`) opens its interactive CLI in the prepared worktree without MCP/hooks. A missing executable is reported as a launch failure, and `wind up` returns that agent process's exit code.
+
+Changing the preference does not rewrite any agent configuration by itself. Run `wind setup` afterward to configure the newly selected integration. The Codex setup path touches only Codex's MCP, hooks, and skill; it does not modify Claude Code or Antigravity configuration.
+
+Exit: 1 unless the command receives exactly one supported agent, or if the preference file is malformed/unwritable. Otherwise 0 after the preference is durably replaced while preserving any other config keys.
 
 ## wind surf
 
@@ -149,6 +165,9 @@ Exit: 1 if you're not authenticated (run `wind auth login` first), with a usage 
 
 ```bash
 wind eval publish <file>
+wind eval outcome frame <family> [<family>…] --statement <text> --exit-condition <text>
+wind eval outcome show <family|outcome-id>
+wind eval outcome next <family|outcome-id> [<family>…] --statement <text> --exit-condition <text>
 ```
 
 `wind eval publish` ships an eval-envelope NDJSON file to Wind Stream — eval results your harness wrote, one JSON event per line (`eval.charter`, `eval.run`, `eval.score`), delivered on the same lane wind's own traces ride, under the same stored token. What wind adds over a raw POST is provenance: each `eval.run` line is stamped with where the run came from — the bound Wind Stream session, branch, commit, release, repo, the git user as actor, the lane (`local` at a terminal, `ci` otherwise), and `wind-cli` as the runner. Stamping is fill-absent: a value the file already carries always wins, so a CI sender's own stamps are never overwritten — and every other line reaches Wind Stream byte-exact; wind parses only what it stamps. What it can't stamp it names rather than drops silently — `provenance absent: ws_session_id (no wind manifest)` — and publishes anyway: absent is valid, silent isn't. You don't need to be in a wind worktree, or even a git repo — each provenance field degrades independently.
@@ -157,7 +176,26 @@ wind eval publish <file>
 
 Delivery is honest about which lane you're on. At an interactive terminal, a Wind Stream that can't be reached — offline, a server error, or a token that's missing, expired, or rejected — spools the batch under `~/.windstream/spools/evals/` and says so: `spooled, not delivered (<reason>)`, pending until the eval spool drain ships (tracked as windstream#943). Non-interactively (CI) there is no "pending": transient failures get a bounded number of synchronous retries and then fail hard, so a CI box is either delivered or failed — never left holding a batch its lifecycle can't flush.
 
-Exit: 1 with a usage line for bad arguments; for an unreadable or malformed file, a missing/mixed/malformed family, or a file over the batch limits; when the pipe rejects the batch or any event in it (each failed event is itemized by line); when the acknowledgment doesn't reconcile as durable (reported, and treated as not delivered); and, non-interactively, for auth failures or for transient failures once the retries are exhausted. 2 when the batch spooled instead of delivering (interactive lane only) — pending, not lost, but not yet durable either. 0 means durably delivered: Wind Stream acknowledged every event committed.
+A delivered publish also points forward: at an interactive terminal, if nothing is linked to that family yet, wind follows the success line with the next move — `next: this family isn't linked to an Outcome yet — begin one: wind eval outcome frame <family> …`. Visible, not automatic: it's an offer, printed only after a durable delivery and only when the link read came back clean, so a family that already has an Outcome — or a read that couldn't answer — gets silence rather than a guess. Non-interactively (CI) it doesn't run at all: there's no one there to accept an invitation, so a CI publish pays nothing for it. The publish result is never changed by it either way.
+
+Exit (`publish`): 1 with a usage line for bad arguments; for an unreadable or malformed file, a missing/mixed/malformed family, or a file over the batch limits; when the pipe rejects the batch or any event in it (each failed event is itemized by line); when the acknowledgment doesn't reconcile as durable (reported, and treated as not delivered); and, non-interactively, for auth failures or for transient failures once the retries are exhausted. 2 when the batch spooled instead of delivering (interactive lane only) — pending, not lost, but not yet durable either. 0 means durably delivered: Wind Stream acknowledged every event committed.
+
+`wind eval outcome` builds the **Outcome** behind a family you're already publishing — the commitment the evaluation closes. Evals grade outputs; the Outcome is what the work was for, and the two meet at the eval family. A family already flowing through the pipe is a viable place to begin: these verbs make the next move visible from where you already stand, instead of sending you back to the platform to frame something first.
+
+- `wind eval outcome frame <family> [<family>…] --statement <text> --exit-condition <text>` — frame the Outcome retroactively: create it, author its Target, and link every listed eval family to it. Framing is the act that writes the Target — and it carries its full set of families at birth, as peers, when the work spans more than one line.
+- `wind eval outcome show <family|outcome-id>` — read the link state: whether this family has an Outcome yet, what it commits to (`Target:` and `Done looks like:`, the exit condition authored at Frame), and — once closed — when it closed and the Evaluation that closed it. A family with nothing linked isn't an error; wind prints the invitation to begin one and exits 0.
+- `wind eval outcome next <family|outcome-id> [<family>…] --statement <text> --exit-condition <text>` — feed forward: read the **closed** prior Outcome, print what closed it, then create the next Outcome carrying the inheritance link back to it, linked to the same families the prior had — the whole set carries forward by default; listing families replaces it with exactly those. A prior that isn't closed is refused, not closed for you — and a closed Outcome is never reopened or edited; the next iteration is a new Outcome.
+
+- `--statement <text>` — the Target's authored claim: what this Outcome commits to. Required by `frame` and `next`.
+- `--exit-condition <text>` — what has to be true for the Outcome to close. Required by `frame` and `next`: the exit is authored at hypothesis time, even when the Outcome is authored after the fact, so a Target without one is refused by name rather than created half-formed.
+
+**The close is never in the CLI — Outcomes close on the platform.** wind frames and feeds forward; the close belongs to a named human in Wind Stream, and comes back here only as something to read and inherit from. There is no `wind eval outcome close`, and there won't be.
+
+Both writing verbs send **exactly once**. An Outcome is created state, not an appended event, so wind never retries a create: an ambiguous failure names the state to check (`wind eval outcome show <family>`) and tells you not to re-run, because a re-run would create a second Outcome. Reads retry quietly instead — a re-read costs nothing and answers the same. Nothing here spools: an Outcome verb is delivered or refused, never pending, so where `publish` can exit 2 these verbs stay on 0/1.
+
+Outcomes are an entitled feature, and an organization without it gets the surface hidden rather than errored — so wind names it in words instead of leaking a bare 404: `Outcomes aren't enabled for your organization (the 'journeys' entitlement is off).` Your published evals are unaffected.
+
+Exit (`outcome`): 0 when the Outcome was created and linked (`frame`, `next`), when a read returned one (`show`), or when `show` found nothing linked to a family — the read succeeded, and the answer is an invitation. 1 for a usage error or a family that isn't slug-shaped; for a missing `--statement` or `--exit-condition`; for a token that's missing, expired, or rejected (`wind auth login`); for feeding forward from an Outcome that isn't closed, or from a family with nothing to inherit from; for an `outcome-id` that genuinely isn't there; for the entitlement refusal above; and for a read or write that failed — including a create that landed but couldn't be linked, which names the unlinked Outcome's id instead of silently retrying.
 
 ## wind attach
 
@@ -193,7 +231,7 @@ Exit: 1 with a usage line for anything other than `--print`, if there's no sessi
 wind connect <ws-session-ref> [--url <url>]
 ```
 
-`wind connect` attaches the current repo to an already-existing Wind Stream session, ad hoc — for repos `wind up` didn't set up. It writes the same kind of manifest `wind up` does, just minimal: no release, no branch, just enough for the SessionStart/SessionEnd hooks to know where this session's trace goes. Nothing uploads immediately: `connect` runs mid-session, so the transcript uploads to Wind Stream when the current Claude Code session ends.
+`wind connect` attaches the current repo to an already-existing Wind Stream session, ad hoc — for repos `wind up` didn't set up. It writes the same kind of manifest `wind up` does, just minimal: no release, no branch, just enough for the SessionStart/SessionEnd hooks to know where this session's trace goes. Nothing uploads immediately: `connect` runs mid-session, so the transcript uploads to Wind Stream when the current connected coding-agent session ends.
 
 - `<ws-session-ref>` — required. The Wind Stream session to attach to.
 - `--url <url>` — optional. The session's canonical URL, stored alongside the reference.
@@ -206,13 +244,19 @@ Exit: 1 with a usage line for bad arguments, if you're not inside a git repo, or
 wind setup
 ```
 
-`wind setup` connects this machine to Wind Stream: it registers the SessionStart/SessionEnd hooks, deploys the `windstream-*` slash commands to `~/.claude/commands`, prompts for your Wind Stream token (skipping the prompt if one's already stored), and registers the Wind Stream MCP with Claude Code. It's idempotent — re-run it any time (after a token rotates, to pick up newly deployed commands, after moving machines) and it only touches what's actually changed.
+`wind setup` connects a coding agent to Wind Stream. It prompts for your Wind Stream token (skipping the prompt if one's already stored), then chooses its setup path from the default selected by `wind agent`:
+
+- **Claude Code (the compatibility default):** registers SessionStart/SessionEnd hooks, deploys `windstream-*` slash commands to `~/.claude/commands`, and registers the user-scoped Wind Stream MCP.
+- **Codex:** registers the native Streamable HTTP MCP with an environment-backed bearer, installs lifecycle hooks in `~/.codex/hooks.json`, and deploys `$windstream-connect` to `~/.agents/skills/windstream-connect`. Codex requires a one-time review/trust action from `/hooks`; setup reports installation, not trust.
+- **Antigravity:** remains launcher-only and has no native setup path in this change.
+
+Setup is idempotent — re-run it after changing to Codex, after a token rotates, or after moving machines. The Codex path never reads or writes Claude Code or Antigravity configuration; the existing Claude path is unchanged.
 
 No arguments or flags.
 
-It prints a readiness readout when it's done — Wind Stream, Claude Code, and Git/GitHub, each line marked with a check or a warning — so you can see at a glance what's connected and what still needs attention.
+It prints a readiness readout when it's done — Wind Stream, the selected connected agent, and Git/GitHub, each line marked with a check or a warning — so you can see at a glance what's connected and what still needs attention.
 
-Exit: always 0. A missing precondition (git not installed, `gh` not authenticated, Claude Code not signed in, no token yet) prints a warning in the readout, not a failure — `wind setup` always does as much as it can and tells you what's left.
+Exit: always 0. A missing precondition (git not installed, `gh` not authenticated, the selected agent not signed in, no token yet) prints a warning in the readout, not a failure — `wind setup` always does as much as it can and tells you what's left.
 
 ## wind auth
 
@@ -222,7 +266,7 @@ wind auth status
 wind auth logout
 ```
 
-`wind auth` manages the Wind Stream token everything else here uses — the CLI, the MCP, the SessionEnd hook. `login` reads a token (pasted at a prompt, or piped via stdin) and stores it, then refreshes the Wind Stream MCP registration in Claude Code so it isn't left pointing at a stale token. `status` reports whether the stored token is actually live — checked directly against Wind Stream, not just whether one exists locally — and where it's stored. `logout` removes the stored token.
+`wind auth` manages the Wind Stream token everything else here uses — the CLI, the MCP, the SessionEnd hook. `login` reads a token (pasted at a prompt, or piped via stdin) and stores it, then refreshes the selected agent's Wind Stream MCP registration. Claude's stored header is updated; Codex's token-free environment-backed entry is only reconciled, and no Claude configuration is touched. `status` reports whether the stored token is actually live — checked directly against Wind Stream, not just whether one exists locally — and where it's stored. `logout` removes the stored token.
 
 - one of `login`, `status`, `logout` — required.
 
@@ -246,7 +290,7 @@ Exit: always 0.
 wind status
 ```
 
-`wind status` reports readiness of the coding tools wind knows how to connect — today, Claude Code and Antigravity: whether each is installed, signed in, and its version. It's distinct from `wind setup`'s readout (wind's own connection to Wind Stream — hooks, MCP, commands) and from `wind doctor`'s diagnostics bundle (a captured, shareable snapshot for a bug report) — `status` is a quick, live probe of the tools themselves.
+`wind status` reports readiness of the coding tools wind knows how to launch — Claude Code, Codex, and Antigravity: whether each is installed, signed in, and its version. It's distinct from `wind setup`'s readout (wind's own connection to the selected agent — hooks, MCP, command/skill) and from `wind doctor`'s Claude-oriented diagnostics bundle (a captured, shareable snapshot for a bug report) — `status` is a quick, live probe of the tools themselves.
 
 No arguments or flags.
 
@@ -276,8 +320,8 @@ Exit: 0, or 1 for help on a command that doesn't exist (`wind help bogus` — th
 
 ## Plumbing
 
-These are normally run *for* you — wind's own hooks invoke `wind hook`, and `/windstream-connect` runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional commands in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
+These are normally run *for* you — wind's own hooks invoke `wind hook`, and the selected agent's connect command or skill runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional commands in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
 
-- **`wind hook <session-start|session-end|retro-drain>`** — invoked by the SessionStart/SessionEnd hooks `wind setup` registers with Claude Code. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. At session end, uploads (or spools, if Wind Stream is unreachable) the session trace. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
+- **`wind hook <session-start|session-end|session-end-spool|retro-drain>`** — invoked by the lifecycle hooks `wind setup` registers. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. Claude's `session-end` uploads within its hook budget or spools on failure. Codex's internal `session-end-spool` performs no network work: it durably spools, writes a trace-ready marker, and returns within Codex's three-second ceiling; the parent `wind up` process drains the spool after Codex exits. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
 - **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
 - **`wind trace [--run <id>] [--json]`** — inspect wind's own trace output: the events each `wind` invocation logs while it runs. Bare `wind trace` prints the most recent run, pretty-printed; `--run <id>` picks an older one by matching its filename; `--json` prints raw JSON lines instead of the pretty form. Exits 0, or 1 if `--run <id>` matches nothing or an unknown flag is passed.

@@ -1,6 +1,8 @@
 # Getting started with wind
 
-A connected session is a coding session that already knows which Wind Stream session it belongs to — before you've typed a word. You don't launch Claude Code yourself: you run `wind`, and `wind` launches your coding tool (Claude Code today, others to come) already wired up — the worktree, the session manifest, the MCP, and the hooks are all in place. This guide walks the full loop, start to finish.
+A connected session is a coding session that already knows which Wind Stream session it belongs to — before you've typed a word. You run `wind`, and `wind` launches your coding tool already wired up — the worktree, the session manifest, the MCP, and the hooks are all in place. This guide walks the full loop, start to finish.
+
+`wind agent claude|codex|antigravity` selects the default launcher, and `wind up --agent <agent>` overrides it once. Claude Code and Codex are connected integrations; Antigravity currently launches in the prepared worktree without Wind Stream MCP/hooks. When Codex is selected, `wind setup` configures only Codex and leaves Claude Code and Antigravity configuration alone. On the first Codex launch, open `/hooks` and trust Wind's lifecycle hooks when prompted.
 
 > Not installed yet? See [Install (macOS / Linux)](install.md) or [Install (Windows)](install-windows.md) first.
 
@@ -9,7 +11,7 @@ A connected session is a coding session that already knows which Wind Stream ses
 ```
 wind up <release> my-feature
   → worktree at ../worktrees/<repo>-<release>-my-feature, branched off release/<release>
-  → claude launches into /windstream-connect → attaches or creates a Wind Stream session
+  → Claude or Codex attaches or creates a Wind Stream session
   → …do the work…
   → on session end, the hook returns a trace to Wind Stream
 ```
@@ -22,7 +24,7 @@ The sections below walk each step.
 wind up <release> <slug>
 ```
 
-creates a worktree off `release/<release>`, writes the session manifest into it, and launches Claude Code there, straight into `/windstream-connect` — the command that attaches to (or creates) the Wind Stream session behind the work.
+creates a worktree off `release/<release>`, writes the session manifest into it, and launches the selected coding agent there. Claude Code enters `/windstream-connect`; Codex starts with `$windstream-connect`. Either path attaches to (or creates) the Wind Stream session behind the work.
 
 If `release/<release>` doesn't exist yet, wind creates and pushes it first — with a confirm prompt at an interactive terminal, or immediately with `--create` (what you need non-interactively, e.g. in CI). Run the release-only form on its own to just take that step, with no session attached:
 
@@ -48,7 +50,7 @@ wind surf <topic>
 
 It opens a full-screen terminal UI (TUI) — continuing an existing Wind Stream conversation about that topic, or starting a new one. Type `/exit` to leave (`/quit` works too, as a silent alias) and drop back to your shell. Always give it a topic — bare `wind surf` currently just prints a reminder to add one.
 
-Inside Claude Code itself, the same reach is available through the `windstream-*` slash commands that `wind setup` deployed there — `/windstream-connect` is the one that opened this session in the first place.
+Inside Claude Code, the same reach is available through the `windstream-*` slash commands that `wind setup` deployed there — `/windstream-connect` is the one that opened this session. In Codex, `$windstream-connect` owns that connection step and the native `windstream` MCP supplies the conversation tool.
 
 Want the session in your browser instead of the terminal? From anywhere in the worktree:
 
@@ -66,7 +68,7 @@ wind down
 
 opens the same kind of full-screen conversation, framed as a retrospective — Wind Stream asks what happened, you tell it straight, and the exchange writes back to the Wind Stream session this worktree is attached to. `/exit` when you're done.
 
-You don't have to run it, though: the SessionEnd hook returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not. Running `wind down` adds your own account of the work on top of that trace — it doesn't replace it.
+You don't have to run it, though: the SessionEnd hook returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not. Claude uploads within its hook budget. Codex spools locally within its three-second hook budget, notifies the parent `wind` CLI, and that CLI completes the upload after Codex exits. Running `wind down` adds your own account of the work on top of that trace — it doesn't replace it.
 
 `wind down --easy` skips the interview for a quick auto summary instead — you just approve or edit it. For non-interactive runs (CI, scripts), add `--yes` to record that summary without asking, or `--message <text>` to record your own words verbatim instead (the argument is the retrospective — supplying it is the approval; for a file-backed one, `--message "$(cat retro.md)"`) — `wind down --easy` needs one of the two off a terminal, or it refuses rather than hang. A clean exit either way means your words are saved for good, whether delivered right away or spooled to sync on a later session start.
 
@@ -82,4 +84,4 @@ attaches the current repo to an existing Wind Stream session, ad hoc. It writes 
 
 ## What's on disk
 
-`.session-state.json`, at the root of the worktree, is the session manifest — the record of which Wind Stream session this work belongs to. `wind up` and `wind connect` write it, and `/windstream-connect` fills in the Wind Stream session id once it attaches; the hooks and `wind down` read it to know where things go. Don't edit it by hand — let wind manage it.
+`.session-state.json`, at the root of the worktree, is the session manifest — the record of which Wind Stream session this work belongs to. `wind up` and `wind connect` write it, and the selected agent's connect command or skill fills in the Wind Stream session id once it attaches; the hooks and `wind down` read it to know where things go. Don't edit it by hand — let wind manage it.
