@@ -82,7 +82,7 @@ Restart Claude Code after its setup path. For Codex, launch it once, open `/hook
 ```
 wind <version>
 Wind Stream
-  ✓ Connected (https://alpha.windstream.ai)
+  ✓ Connected (https://app.windstream.ai)
   ✓ stored: dpapi                 # token in the Windows credential store
   ✓ MCP registered
 Claude Code
@@ -148,4 +148,4 @@ See [Getting started](getting-started.md) for the full loop.
 - **Updating:** once winget is live, `winget upgrade WindStream.Wind`; until then, repeat the `gh` recipe above — replace `$HOME\bin\wind.exe` with the new build (`Move-Item … -Force`, or rename-then-replace if it's running), then re-run `wind setup` (idempotent). Restart Claude Code after its setup path; Codex reads its user configuration on the next launch. Always check `wind -v` afterward.
 - **Terminal host:** if the TUI renders garbled or won't restore under legacy `conhost`, switch to **Windows Terminal** (ConPTY).
 - **Troubleshooting:** the readout above (from `wind setup`) is the health check — every `✓` line is confirmation, not just a status. If something's off, `wind doctor` bundles the same state into a diagnostics file for a bug report; it's a snapshot for support, not a replacement for the readout.
-- **Non-default environments:** set `WIND_HOST` to your Wind Stream host before `wind setup` (default: `https://alpha.windstream.ai`).
+- **Non-default environments:** set `WIND_HOST` to your Wind Stream host before `wind setup` (default: `https://app.windstream.ai`).

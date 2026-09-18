@@ -86,4 +86,4 @@ See [Getting started](getting-started.md) for the full loop.
 ## Notes
 
 - **Updating:** `brew upgrade wind` (standard path); while the repo is private, re-run the `gh` recipe above — `sudo install` again (never overwrite the binary in place; macOS kills a running binary replaced in place), then re-run `wind setup` (idempotent). Restart Claude Code after its setup path; Codex reads its user MCP/skill configuration on the next launch.
-- **Non-default environments:** set `WIND_HOST` to your Wind Stream host before `wind setup` (default: `https://alpha.windstream.ai`).
+- **Non-default environments:** set `WIND_HOST` to your Wind Stream host before `wind setup` (default: `https://app.windstream.ai`).

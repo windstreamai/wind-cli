@@ -10,14 +10,15 @@ Usage:
 
 Core commands
   up         Open or create a session on a release or feature branch
+  next       Show the one thing to do next in this session
   surf       Deliberate with Wind Stream in your terminal
   down       Write a retrospective for this session
-  open       Open this session's Wind Stream page in the browser
+  open       Open this session's Wind Stream page — or any Wind Stream id — in the browser
 
 Setup commands
   setup      Set up wind on this machine
   auth       Manage your Wind Stream token
-  agent      Set the default coding agent
+  agent      Show or set the default coding agent
   connect    Connect this repo to a Wind Stream session
   status     Show readiness of installed coding tools
   doctor     Capture diagnostics for a bug report
@@ -25,7 +26,8 @@ Setup commands
 Additional commands
   bind       Persist the Wind Stream session id to the session manifest
   eval       Publish eval envelopes and build their Outcomes
-  attach     Upload evidence images to the bound Wind Stream session
+  attach     Upload images, Markdown, text, and logs to the bound Wind Stream session
+  sync       Deliver what is waiting to upload, or see why it is waiting
   trace      Inspect systrace logs
 
 Learn more
@@ -116,19 +118,32 @@ Exit: 1 with a usage line for bad arguments, for a missing or unparseable `--gh`
 
 **`wind down` is not yet review-aware:** its summary reads the branch's commits, which on a review seat are the reviewed PR author's — review-aware wind-down is planned.
 
+## wind next
+
+```bash
+wind next
+```
+
+`wind next` names the one thing to do now in this session, from real state: it reads the session manifest, local git (uncommitted files, commits against the session's base, whether the branch is pushed), and — when something is pushed to review — the PR and its checks via `gh`. The output is a small readout: a `state` line, a `next` line with the exact command to run, and an occasional `note` when wind couldn't look somewhere (a blind spot is named, never silently read as "nothing there").
+
+It never mutates anything and never runs the command it names. Outside a wind session it says so and points at `wind up`; without a git repo, or with `gh` missing or signed out, the readout says which signal it lost and what it could still see.
+
+Exit: 1 for an unexpected argument (the command takes none in v1). Otherwise 0 — the readout is the product, even when the answer is "nothing to do right now".
+
 ## wind agent
 
 ```bash
+wind agent
 wind agent claude|codex|antigravity
 ```
 
-Sets the coding agent that `wind up` launches when that command has no explicit `--agent` flag. The preference is stored in `~/.windstream/config.json`; existing installs with no preference continue to use Claude Code. An invocation-level flag always wins, for example `wind up feature mcp-bridge --agent codex`.
+`wind agent` prints the coding agent that `wind up` launches when that command has no explicit `--agent` flag. Pass an agent name to set that preference. It is stored in `~/.windstream/config.json`; existing installs with no preference continue to use Claude Code. An invocation-level flag always wins, for example `wind up feature mcp-bridge --agent codex`.
 
 Claude Code keeps its named `/windstream-connect` launch. Codex (`codex`) receives the stored Wind token only in its child-process environment, then starts with `$windstream-connect`; selecting Codex with no stored Wind credential refuses up front — before any branch or worktree is created — with a pointer at `wind auth login`. After Codex exits, wind consumes the hook's trace-ready notification and uploads the durable spool; traces spooled without a bound Wind Stream session are named loudly (count and reason) rather than promised a retry no drain can deliver. Antigravity (`agy`) opens its interactive CLI in the prepared worktree without MCP/hooks. A missing executable is reported as a launch failure, and `wind up` returns that agent process's exit code.
 
 Changing the preference does not rewrite any agent configuration by itself. Run `wind setup` afterward to configure the newly selected integration. The Codex setup path touches only Codex's MCP, hooks, and skill; it does not modify Claude Code or Antigravity configuration.
 
-Exit: 1 unless the command receives exactly one supported agent, or if the preference file is malformed/unwritable. Otherwise 0 after the preference is durably replaced while preserving any other config keys.
+Exit: 1 for an unsupported agent or if the preference file is malformed/unreadable/unwritable. Otherwise 0 after printing the current preference or durably replacing it while preserving any other config keys.
 
 ## wind surf
 
@@ -203,27 +218,83 @@ Exit (`outcome`): 0 when the Outcome was created and linked (`frame`, `next`), w
 wind attach <file>... [--session <ref>] [--md]
 ```
 
-`wind attach` uploads image evidence — screenshots, diagrams, anything a PR or a retrospective wants to point at — to the Wind Stream session this worktree is bound to. Accepted types are `png`, `jpg`, `jpeg`, `gif`, and `webp`, up to 20MB each (no SVG in v0). Each file that clears the checks gets an `att-*` reference minted by Wind Stream; wind prints that reference, a ready-to-paste markdown link, and the session's URL. The target session resolves the same way the rest of `wind` does: the manifest's `ws_session_id`, falling back to `ws_session`, unless `--session` overrides it.
+`wind attach` uploads images, Markdown plans, plain text, and logs to the Wind Stream session this worktree is bound to. Images (`png`, `jpg`, `jpeg`, `gif`, `webp`) may be up to 20 MiB each. Text (`md`, `txt`, `log`) may be up to 1 MiB each and must be UTF-8 without NUL bytes. Filenames and file bytes are preserved; `.md` uses `text/markdown`, while `.txt` and `.log` use `text/plain`. Each accepted file gets an `att-*` reference; wind prints that reference, a markdown link, and the session's URL. The target resolves from the manifest's `ws_session_id`, falling back to `ws_session`, unless `--session` overrides it.
 
-- `<file>...` — required, one or more. Each is checked independently — extension against the allowlist, size against the 20MB cap, existence and non-emptiness — so a bad file doesn't stop the good ones in the same batch.
+```bash
+wind attach context/plans/plan.md diagnostics.log screenshot.png
+wind attach notes.txt --session session-abc --md
+```
+
+Text uploads are stored as session attachments and are available to the session through their attachment fetch references, without pasting the content. Image thumbnails are generated only for images. For other supported document formats, use Wind Stream's session upload interface.
+
+- `<file>...` — required, one or more; images and text can share a batch. Each is checked independently for type, per-type size limit, existence, non-emptiness, and valid text encoding where applicable.
 - `--session <ref>` — attach to a specific session instead of the one bound in `.session-state.json`. Works outside a wind worktree entirely — no manifest needed.
 - `--md` — print only the markdown lines, one per uploaded file, nothing else. For piping straight into a PR body or a retrospective note.
 
-The attachment's system of record is Wind Stream, not the printed markdown: the `att-*` reference is the durable pointer, and the markdown line is a **link** to the session, not an inline `![]()` embed — the attachment lives in Wind Stream, and the markdown is a link, not an inline image, because attachment URLs require Wind Stream access. Follow the link to see the image. `wind attach` requires a Wind Stream server with session-scoped attachment upload support — older servers report the failure honestly (404).
+The attachment's system of record is Wind Stream; the `att-*` reference is the durable pointer. The markdown line links to the session, where access to the uploaded file requires Wind Stream authentication. Text requires the server's session-scoped text upload extension. An image-only server rejects text with 400; wind reports the rejection and continues later files. Servers without the upload endpoint return 404.
 
-Exit: 1 with a usage line for bad arguments; for no session bound anywhere (points at `/windstream-connect`, `wind bind`, or `--session`); for no stored token (`wind auth login`); or if any file in the batch failed. Per-file refusals — unsupported extension, over the 20MB cap, missing, empty — and per-request failures — server error, network error, the server's own oversize/bad-request response (413 is reported with the server's own byte numbers) — are all named without stopping the rest of the batch. A session-level rejection (bad token, session not found, not a contributor on the session) stops the batch outright instead, since retrying the next file against the same broken session is pointless. 0 only when every file in the batch uploaded.
+Exit: 1 with a usage line for bad arguments; for no session bound anywhere (points at `/windstream-connect`, `wind bind`, or `--session`); for no stored token (`wind auth login`); or if any file in the batch failed. Per-file refusals — unsupported extension, over the per-type cap, missing, empty, invalid text — and per-request failures — server error, network error, the server's own oversize/bad-request response (413 is reported with the server's own byte numbers) — are all named without stopping the rest of the batch. A session-level rejection (bad token, session not found, not a contributor on the session) stops the batch outright instead, since retrying the next file against the same broken session is pointless. 0 only when every file in the batch uploaded.
+
+## wind sync
+
+Deliver what is waiting to upload, or see why it is waiting.
+
+```bash
+wind sync                              # deliver everything deliverable now; receipt per entry
+wind sync status                       # list what is waiting, with the next action for each
+wind sync <entry> [--session <ref>]    # deliver one entry, optionally to a session you name
+wind sync drop <entry> [--yes]         # discard one entry (asks first; names it in full)
+```
+
+Traces, retrospectives, and eval publishes that could not be delivered wait under
+`~/.windstream/spools/`. Every session start drains that queue on its own, so `wind sync`
+is for the moments the agents cannot handle: a trace from a worktree that was never
+connected, a trace over the server's size cap, an expired token you have since renewed.
+
+- `--session <ref>` — deliver `<entry>` to a session other than the one it was recorded
+  against. For an entry whose worktree was never connected, or whose session has since
+  been deleted.
+- `--yes` — with `drop`, skip the confirm and discard immediately.
+
+`wind sync status` shows each entry as **pending** (it will be retried) or **held** with a
+reason: `over-cap` (kept locally until the platform can take it in parts), `no-session`
+(name one with `--session`), `no-transcript` (the session ended with nothing to send),
+`host-mismatch` (belongs to another Wind Stream host — `WIND_HOST=<host> wind sync`
+delivers it there, or drop it), `no-access` (the session refused it — deleted, or no
+access; name another with `--session`, or drop it), `gated` (eval publish, waiting on a
+platform change). An entry whose sidecar cannot be read at all is listed as
+**unreadable** with its path — nothing can deliver it, so the listed action is
+`wind sync drop <entry>`, and it is counted among the held.
+
+Only one drain runs at a time on a machine: `wind sync` shares its lock with the drain a
+session start spawns and the one that follows a Codex session, so the same retrospective
+can never be posted twice. If a drain is already running, `wind sync` says so in one line
+and exits `2` without touching the queue — re-run it in a moment. `wind sync status` and
+`wind sync drop` take no lock; neither one delivers anything.
+
+`wind sync` and `wind sync <entry>` exit `0` when nothing remains, `2` when something is
+still pending or held (including when another drain holds the lock), `1` when refused;
+`wind sync status` always exits `0`; `wind sync drop` exits `0` when it discarded, `1`
+when refused or declined.
+
+`wind status` prints one line when the queue is non-empty, and `wind down` opens with the
+queue's state for the worktree you are closing.
 
 ## wind open
 
 ```bash
-wind open [--print]
+wind open [<id>] [--print]
 ```
 
 `wind open` opens the Wind Stream session this worktree is attached to in your browser — the "take me there" verb for when you're beside the session, not in it. It resolves the target from the session manifest: the exact URL recorded when the session was bound, or, for a manifest bound before URLs were recorded, the session id plus your Wind Stream host. Either way it echoes the URL it's opening, so even a box where no browser window can appear still shows you the link.
 
+Give it an id and the manifest doesn't matter: `wind open session-…` (or any Wind Stream id — `asset-…`, `att-…`, `outcome-…`) opens `{host}/open/<id>`, the platform's go-link, which redirects to the thing's page. wind checks only that the argument is id-*shaped*; the platform is the authority on which kinds have pages — an id with no page yet gets the platform's honest 404, not a guess. Works from any directory, no worktree needed.
+
+- `<id>` — optional. A Wind Stream id in storage form (`<kind>-<nanoid>`). With an id, `wind open` reads nothing locally: no manifest, no binding, no token.
+
 - `--print` — print the bare URL instead of opening a browser, nothing else on the line. For terminals where a browser can't reach you (SSH, CI), or for pasting the link somewhere.
 
-Exit: 1 with a usage line for anything other than `--print`, if there's no session manifest here (run `wind up` or `wind connect` first), or if the manifest has no Wind Stream session bound yet (run `/windstream-connect` in your coding session to attach one). Otherwise 0 — with `--print` that means the URL was printed; without it, that the URL was handed to your system's opener (wind can't see whether a window actually appeared).
+Exit: 1 with a usage line for anything other than one optional id and `--print`, or for an argument that isn't id-shaped; without an id, 1 if there's no session manifest here (run `wind up` or `wind connect` first) or if the manifest has no Wind Stream session bound yet (run `/windstream-connect` in your coding session to attach one). Otherwise 0 — with `--print` that means the URL was printed; without it, that the URL was handed to your system's opener (wind can't see whether a window actually appeared).
 
 ## wind connect
 
@@ -322,6 +393,6 @@ Exit: 0, or 1 for help on a command that doesn't exist (`wind help bogus` — th
 
 These are normally run *for* you — wind's own hooks invoke `wind hook`, and the selected agent's connect command or skill runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional commands in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
 
-- **`wind hook <session-start|session-end|session-end-spool|retro-drain>`** — invoked by the lifecycle hooks `wind setup` registers. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. Claude's `session-end` uploads within its hook budget or spools on failure. Codex's internal `session-end-spool` performs no network work: it durably spools, writes a trace-ready marker, and returns within Codex's three-second ceiling; the parent `wind up` process drains the spool after Codex exits. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also drains the home-level spool queues (`~/.windstream/spools/`): undelivered traces flush in-hook, and pending `wind down` turns are handed to a detached `wind hook retro-drain` child — also plumbing, spawned automatically and lock-guarded, never something you run yourself — so they finish syncing at their own pace without delaying your session.
-- **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
+- **`wind hook <session-start|session-end|session-end-spool|drain>`** — invoked by the lifecycle hooks `wind setup` registers. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. Claude's `session-end` uploads within its hook budget or spools on failure. Codex's internal `session-end-spool` performs no network work: it durably spools, writes a trace-ready marker, and returns within Codex's three-second ceiling; the parent `wind up` process drains the spool after Codex exits. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also spawns one detached, lock-guarded `wind hook drain` child — also plumbing, spawned automatically, never something you run yourself — that flushes every kind waiting in the home-level spool queues (`~/.windstream/spools/`; [`wind sync`](#wind-sync) is the command form of the same queue). No upload happens inside a hook budget, so a trace post at API scale and a conversation reply at LLM latency both finish without delaying your session.
+- **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. The ref is normalized at this boundary: `session-<id>` passes through, a pasted session URL has its id extracted, and a bare id gets the prefix — anything else is refused, naming the three shapes, so a ref that can't be read is caught here rather than becoming an upload that silently goes nowhere. What lands in the manifest is always the canonical `session-<id>`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
 - **`wind trace [--run <id>] [--json]`** — inspect wind's own trace output: the events each `wind` invocation logs while it runs. Bare `wind trace` prints the most recent run, pretty-printed; `--run <id>` picks an older one by matching its filename; `--json` prints raw JSON lines instead of the pretty form. Exits 0, or 1 if `--run <id>` matches nothing or an unknown flag is passed.

@@ -58,7 +58,7 @@ Want the session in your browser instead of the terminal? From anywhere in the w
 wind open
 ```
 
-opens the Wind Stream session this work is attached to — it reads the session manifest, so you never have to fish the URL out of a file. Where a browser can't appear (SSH, CI), `wind open --print` prints the URL instead, ready to paste.
+opens the Wind Stream session this work is attached to — it reads the session manifest, so you never have to fish the URL out of a file. Where a browser can't appear (SSH, CI), `wind open --print` prints the URL instead, ready to paste. And when someone hands you an id instead of a link — `wind open session-…` (any Wind Stream id works) opens it directly, from any directory.
 
 ## Close the loop: wind down
 

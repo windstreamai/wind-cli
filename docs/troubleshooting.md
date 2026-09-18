@@ -46,7 +46,7 @@ Fix: run `wind auth status` to see whether a token is stored and whether Wind St
 
 ## Wrong or unreachable environment
 
-Every request the CLI and the MCP send — trace uploads, `wind down`, MCP calls — goes to the host `WIND_HOST` resolves to (default `https://alpha.windstream.ai`). If it's set to the wrong host, or set for the CLI but not picked up by the MCP, things fail or land somewhere you don't expect.
+Every request the CLI and the MCP send — trace uploads, `wind down`, MCP calls — goes to the host `WIND_HOST` resolves to (default `https://app.windstream.ai`). If it's set to the wrong host, or set for the CLI but not picked up by the MCP, things fail or land somewhere you don't expect.
 
 Fix: set `WIND_HOST` to your Wind Stream host, then re-run `wind setup` so the MCP registration is refreshed to match — CLI and MCP need to agree on the same host. See [Install → Notes](install.md#notes) (non-default environments).
 
