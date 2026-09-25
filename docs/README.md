@@ -20,6 +20,7 @@ wind up <release> my-feature
 | [Install (Windows)](install-windows.md) | PowerShell-first install, Windows gotchas |
 | [Getting started](getting-started.md) | The session lifecycle: up → work → down |
 | [Command reference](commands.md) | Every verb: synopsis, flags, behavior |
+| [wind proxy](proxy.md) | Shadow one service behind another, score the parity window |
 | [What a trace contains](trace.md) | Everything the SessionEnd trace ships, listed up front |
 | [Troubleshooting](troubleshooting.md) | Symptom-first fixes |
 

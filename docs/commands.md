@@ -29,6 +29,7 @@ Additional commands
   attach     Upload images, Markdown, text, and logs to the bound Wind Stream session
   sync       Deliver what is waiting to upload, or see why it is waiting
   trace      Inspect systrace logs
+  proxy      Shadow one service behind another, record it as a set, replay the set, and score the parity window on Wind Stream
 
 Learn more
   wind <command> --help    Show usage and flags for a command
@@ -211,6 +212,55 @@ Both writing verbs send **exactly once**. An Outcome is created state, not an ap
 Outcomes are an entitled feature, and an organization without it gets the surface hidden rather than errored — so wind names it in words instead of leaking a bare 404: `Outcomes aren't enabled for your organization (the 'journeys' entitlement is off).` Your published evals are unaffected.
 
 Exit (`outcome`): 0 when the Outcome was created and linked (`frame`, `next`), when a read returned one (`show`), or when `show` found nothing linked to a family — the read succeeded, and the answer is an invitation. 1 for a usage error or a family that isn't slug-shaped; for a missing `--statement` or `--exit-condition`; for a token that's missing, expired, or rejected (`wind auth login`); for feeding forward from an Outcome that isn't closed, or from a family with nothing to inherit from; for an `outcome-id` that genuinely isn't there; for the entitlement refusal above; and for a read or write that failed — including a create that landed but couldn't be linked, which names the unlinked Outcome's id instead of silently retrying.
+
+## wind proxy
+
+```bash
+wind proxy init <service> --serve <url> --shadow <url> [--route "GET /path/:id"]… [--window <id>] [--coverage-min <0..1>] [--volume-floor <n>] [--port <n>] [--force]
+wind proxy run [--config <path>] [--once] [--record <slug> [--record-max <n>]]
+wind proxy record <slug> --from <url> --requests <file> [--out <dir>] [--unsafe] [--generator <text>] [--config <path>] [--force]
+wind proxy record <slug> --transport exec --command "<cmd> {input}" --inputs <dir> [--out <dir>] [--media-type <type>] [--timeout-ms <n>] [--generator <text>] [--config <path>] [--force]
+wind proxy replay <set-dir | paths-file> [--against <url | "cmd {input}">] [--transport http|exec] [--service <slug>] [--window <id>] [--out <dir>] [--media-type <type>] [--timeout-ms <n>] [--unsafe] [--no-evidence] [--config <path>]
+wind proxy replay --divergence <id> --against <url> [--proxy <url>] [--media-type <type>] [--timeout-ms <n>] [--config <path>]
+```
+
+`wind proxy` shadows one service behind another so Wind Stream can score how far apart they are, and carries the set that makes the comparison repeatable. `init` registers the service with your organization and writes `wind-proxy.json` with its custody policy. `run` serves the `--serve` upstream unchanged while comparing the `--shadow` upstream off the response path and flushing counters to `/evals`; with `--record <slug>` it also captures what it serves into `<slug>-set/`. `record` captures a service's answers as a set without a proxy in the middle: over `http` it issues a paths file against `--from`; over `exec` it runs `--command` once per file in `--inputs`. `replay` issues a set against `--against` and, where the set carries expectations, compares and counts exactly as `run` does, so the platform sees one kind of window; divergences are written to `<slug>-divergences-set/` and their fixtures placed per custody. A plain paths file is a requests set: `replay` only drives it (the running proxy does the comparing). Replaying a divergences set is reproduction: each entry is issued again and shown side by side, expected against observed, with values, after redaction. `replay --divergence <id>` does the same for one divergence held in a running proxy's memory when the custody mode is `none`.
+
+A set is a directory: `manifest.json` (identity, stage, provenance, transport, entries), `inputs/` (the artifacts entries are about), `expected/` (the recorded answers), and, in a divergences set, `observed/`. Every payload carries a sha256 that `replay` verifies before issuing anything. Transports in this release: `http` and `exec`.
+
+- `--serve <url>` — the upstream callers get answers from.
+- `--shadow <url>` — the upstream compared against, never served.
+- `--route "GET /p/:id"` — a route template that names a counter (repeatable).
+- `--window <id>` — the measurement window id (default `unwindowed-<date>`; for `replay`, overrides the config).
+- `--coverage-min <0..1>` — route coverage required before the window can pass (default `0.99`).
+- `--volume-floor <n>` — compared calls required before the window can pass.
+- `--port <n>` — the port `wind proxy run` listens on (default `8787`).
+- `--force` — `init`: re-register over an existing `wind-proxy.json`; `record`: overwrite an existing set directory. Overwriting does not delete payload files a previous recording left behind.
+- `--config <path>` — the proxy config file (default `wind-proxy.json`). `record` and `replay` work without one; with one they apply its redaction rules, routes, and custody policy.
+- `--once` — serve until the proxy is quiet, flush, then exit.
+- `--record <slug>`, `--record-max <n>` — `run`: capture served exchanges into `<slug>-set/`, deduplicated by method and path, capped at `n` entries (default 500).
+- `--from <url>`, `--requests <file>` — `record` over http: the truth and the requests to ask it, one per line (`GET /tags/abc` or `/tags/abc`, `#` comments).
+- `--transport http|exec` — `record`: default `http`; `replay`: default from the set.
+- `--command "<cmd> {input}"`, `--inputs <dir>` — `record` over exec: the command run once per input file; `{input}` is the file's path and `{id}` the entry id.
+- `--against <target>` — `replay`: the candidate, a URL or, with `--transport exec`, a command template. Default: the config's `shadow` for a set that carries expectations; the running proxy at the config's `port` for a requests set, which has nothing to compare and is driving.
+- `--service <slug>` — `replay`: the service the evidence is filed under (default: the config).
+- `--out <dir>` — `record`: the set directory (default `<slug>-set`); `replay`: the divergences set directory (default `<slug>-divergences-set`, overwritten).
+- `--media-type <type>` — exec: the media type of the command's stdout (default `application/json`).
+- `--timeout-ms <n>` — per-entry timeout (default `30000`).
+- `--unsafe` — record and replay methods other than `GET` and `HEAD`.
+- `--no-evidence` — `replay`: compare and report locally, post nothing.
+- `--divergence <id>`, `--proxy <url>` — `replay`: reproduce one divergence from the proxy running at `--proxy` (default: the config's port) in the `none` custody mode.
+- `--generator <text>` — `record`: the name and version of the system whose answers were recorded.
+
+`replay --divergence` reads one fixture from the running proxy's control endpoint (`/.wind-proxy/divergences/<id>`, loopback only, `none` custody mode only), and requires the running proxy's `wind-proxy.json` — the ring redacts what it holds, so the reproduction needs the same rules to compare like with like. Its list endpoint reports `ring_size` as the ring's capacity, not its occupancy. Source-mode flags (`--transport`, `--service`, `--window`, `--out`, `--no-evidence`) have no effect with `--divergence`, and neither does `--media-type`, which only types an exec command's stdout.
+
+Exit (`init`): 1 with a usage line for bad arguments, if `wind-proxy.json` already exists without `--force`, for a token that's missing, expired, or rejected (`wind auth login`), or if the platform refuses the registration or can't be reached; 0 once the service is registered and `wind-proxy.json` is written.
+
+Exit (`run`): 1 if the config is missing or malformed, for a token problem, if the service isn't registered on the platform yet (run `wind proxy init` first), or if `--record`'s set directory already exists; otherwise it serves until `--once`'s quiet point or a shutdown signal, then exits 0, or 2 if the final flush at shutdown could not deliver its evidence (it is spooled for the next run or retained).
+
+Exit (`record`): 1 for bad arguments, an existing set directory without `--force`, an unreadable requests file or inputs directory, a named config that can't be read, or any entry that failed at the transport; 0 once the set is written (entries the truth answered with an error status are recorded as such).
+
+Exit (`replay`): 1 for bad arguments, a set that fails integrity, no target, a token problem when evidence is on or when custody is `windstream` (both need one), or any entry that failed at the transport; 0 when every entry was issued, divergences included.
 
 ## wind attach
 
