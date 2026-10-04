@@ -2,7 +2,7 @@
 
 A connected session is a coding session that already knows which Wind Stream session it belongs to — before you've typed a word. You run `wind`, and `wind` launches your coding tool already wired up — the worktree, the session manifest, the MCP, and the hooks are all in place. This guide walks the full loop, start to finish.
 
-`wind agent claude|codex|antigravity` selects the default launcher, and `wind up --agent <agent>` overrides it once. Claude Code and Codex are connected integrations; Antigravity currently launches in the prepared worktree without Wind Stream MCP/hooks. When Codex is selected, `wind setup` configures only Codex and leaves Claude Code and Antigravity configuration alone. On the first Codex launch, open `/hooks` and trust Wind's lifecycle hooks when prompted.
+`wind agent claude|codex` selects the default launcher, and `wind up --agent <agent>` overrides it once. Claude Code and Codex are connected integrations. When Codex is selected, `wind setup` configures only Codex and leaves Claude Code configuration alone. On the first Codex launch, open `/hooks` and trust Wind's lifecycle hooks when prompted.
 
 > Not installed yet? See [Install (macOS / Linux)](install.md) or [Install (Windows)](install-windows.md) first.
 
@@ -66,11 +66,11 @@ opens the Wind Stream session this work is attached to — it reads the session 
 wind down
 ```
 
-opens the same kind of full-screen conversation, framed as a retrospective — Wind Stream asks what happened, you tell it straight, and the exchange writes back to the Wind Stream session this worktree is attached to. `/exit` when you're done.
+drafts a retrospective from this seat's own work and agent sessions, shows what wind verified (and what it couldn't), and asks *anything to add?* Choose Down to record it to the Wind Stream session this worktree is attached to, or Add something to type an addition (typing `down` there records it). Cancel, or `/exit`, records no retrospective; the draft exchange stays on the session as context. For the free-form interview instead, run `wind down --interview`.
 
 You don't have to run it, though: the SessionEnd hook returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not. Claude uploads within its hook budget. Codex spools locally within its three-second hook budget, notifies the parent `wind` CLI, and that CLI completes the upload after Codex exits. Running `wind down` adds your own account of the work on top of that trace — it doesn't replace it.
 
-`wind down --easy` skips the interview for a quick auto summary instead — you just approve or edit it. For non-interactive runs (CI, scripts), add `--yes` to record that summary without asking, or `--message <text>` to record your own words verbatim instead (the argument is the retrospective — supplying it is the approval; for a file-backed one, `--message "$(cat retro.md)"`) — `wind down --easy` needs one of the two off a terminal, or it refuses rather than hang. A clean exit either way means your words are saved for good, whether delivered right away or spooled to sync on a later session start.
+For non-interactive runs (CI, scripts), add `--yes` to record the generated draft without asking, or `--message <text>` to record your own words verbatim instead (the argument is the retrospective — supplying it is the approval). For text kept in a file, `--message-file <path>` records the file's contents as they are. Off a terminal with neither, `wind down` refuses rather than hang, then prints a short self-review brief for the agent driving it to write from. (`--easy` is still accepted for compatibility and does nothing.) The exit code says what happened to your words: `0` delivered, `2` saved on this machine and not yet sent (it syncs on a later session start, and `wind sync` sends it now), `1` nothing saved.
 
 ## Not in a wind worktree?
 

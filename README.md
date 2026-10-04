@@ -1,7 +1,7 @@
 # wind — the Wind Stream CLI
 
 Binary distribution of **wind**, the Wind Stream CLI. `wind` connects Wind
-Stream workflows to your AI coding tools like Claude Code, Antigravity, and Codex.
+Stream workflows to your AI coding tools like Claude Code and Codex.
 `wind` connects work to your GitHub integration and makes sure workstreams stay together.
 It sets up the session, and returns traces and surfaces your retrospective to Wind Stream.
 

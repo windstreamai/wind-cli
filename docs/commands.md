@@ -9,34 +9,44 @@ Usage:
   wind <command> [args]
 
 Core commands
-  up         Open or create a session on a release or feature branch
-  next       Show the one thing to do next in this session
-  surf       Deliberate with Wind Stream in your terminal
-  down       Write a retrospective for this session
-  open       Open this session's Wind Stream page — or any Wind Stream id — in the browser
+  up         write  Open or create a session on a release or feature branch
+  surf       write  Deliberate with Wind Stream in your terminal
+  down       write  Write a retrospective for this session
+  open       read   Open this session's Wind Stream page — or any Wind Stream id — in the browser
 
 Setup commands
-  setup      Set up wind on this machine
-  auth       Manage your Wind Stream token
-  agent      Show or set the default coding agent
-  connect    Connect this repo to a Wind Stream session
-  status     Show readiness of installed coding tools
-  doctor     Capture diagnostics for a bug report
+  setup      write  Set up wind on this machine
+  auth       write  Manage your Wind Stream token
+  agent      write  Show or set the default coding agent
+  connect    write  Connect this repo to a Wind Stream session
+  status     read   Show readiness of installed coding tools
+  doctor     write  Capture diagnostics for a bug report
 
 Additional commands
-  bind       Persist the Wind Stream session id to the session manifest
-  eval       Publish eval envelopes and build their Outcomes
-  attach     Upload images, Markdown, text, and logs to the bound Wind Stream session
-  sync       Deliver what is waiting to upload, or see why it is waiting
-  trace      Inspect systrace logs
-  proxy      Shadow one service behind another, record it as a set, replay the set, and score the parity window on Wind Stream
+  bind       write  Persist the Wind Stream session id to the session manifest
+  eval       write  Publish eval envelopes and build their Outcomes
+  attach     write  Upload images, Markdown, text, and logs to the bound Wind Stream session
+  sync       write  Deliver what is waiting to upload, or see why it is waiting
+  trace      read   Inspect wind's system trace, or brief this seat's agent sessions
+  proxy      write  Shadow one service behind another, record it as a set, replay the set, and score the parity window on Wind Stream
+  factory    write  Run the Wind Stream software factory: brief → issue → coding agent → gate → review handoff
 
 Learn more
   wind <command> --help    Show usage and flags for a command
   wind --version           Show the installed version
+
+Global flags (any position)
+  --tui / --no-tui         Open, or suppress, a command's full-screen view; the default follows
+                           who is calling (a terminal gets the view, an agent or script gets text)
+
+Effect column: read  leaves nothing behind · write  records, queues, or changes something (details on each command's --help)
 ```
 
 Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same index. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by coding-agent lifecycle hooks — but `wind help hook` still documents it.
+
+## Global flags: `--tui` and `--no-tui`
+
+Any command, any position. wind decides once per run who is calling and renders accordingly: a person at a terminal gets a command's full-screen view where it has one (`wind surf`, `wind down`), while a coding agent's shell, CI, or a pipe gets the same command in plain text with the same receipts and exit codes. The decision reads the coding agent's own environment first (Claude Code marks its shells, attended or not), then `CI`, then whether stdin and stdout are a terminal — so a terminal opened inside an agent session still counts as the agent's. `--tui` opens the view where wind would not have (it still needs a real terminal to draw in; without one the command renders inline and says so), and `--no-tui` keeps a command in text at a terminal. Neither flag changes what a command records, and the two together are refused. The verdict a run took is on its systrace line (`wind trace`).
 
 ## wind up
 
@@ -59,7 +69,7 @@ In release mode, `wind up` has two forms. `wind up <release>` just makes sure `r
 - `--ws <ref>` — session mode only. Attach a specific, already-existing Wind Stream session instead of letting `/windstream-connect` create a new one.
 - `--gh <issue>` — session mode only. Record the GitHub issue this session is anchored to — the bare number (`94`) or a pasted issue URL, normalized to the number; it lands in the session manifest as `gh_issue`, where downstream tooling can pick it up (e.g. to stamp `Closes #N` on the session's PR). Structural check only — the issue isn't looked up on GitHub, so `wind up` works before the network does.
 - `--create` — create `release/<release>` non-interactively when it doesn't exist yet. At an interactive terminal wind asks first; this is the opt-in for when there's no one to ask.
-- `--agent <agent>` — launch `claude`, `codex`, or `antigravity` for this session. It overrides the preference set by `wind agent`; without either, wind defaults to Claude Code for backward compatibility.
+- `--agent <agent>` — launch `claude` or `codex` for this session. It overrides the preference set by `wind agent`; without either, wind defaults to Claude Code for backward compatibility.
 
 Don't have a name for the work yet? Leave the slug off and pass a binding flag: `wind up <release> --gh <issue>` (or `--ws <ref>`) fetches the referenced source's title and **proposes a session name** — confirm at the terminal and the session starts under it. Non-interactively wind never guesses: it prints the proposal and the exact re-run command instead. If no title is fetchable (offline, `gh` missing, unresolvable reference), wind says the flags went unused rather than dropping them silently.
 
@@ -117,32 +127,26 @@ A PR that doesn't exist, that GitHub can't be reached to check, or that's alread
 
 Exit: 1 with a usage line for bad arguments, for a missing or unparseable `--gh` value, for `--create`, for a cross-repo PR URL, an unreachable network, a PR that's missing/merged/closed, or a branch-name collision — every refusal creates nothing. Declining the terminal confirm isn't an error — that exits 0, same as everywhere else in `wind up`. Otherwise `wind up` hands off to the selected coding agent and exits with that agent's own exit code.
 
-**`wind down` is not yet review-aware:** its summary reads the branch's commits, which on a review seat are the reviewed PR author's — review-aware wind-down is planned.
+**`wind down` on a review seat** knows it's a review: the seat records the PR it anchors, so the draft says what the review found and decided, and never credits the reviewed PR's features to the seat.
 
-## wind next
+## wind next (removed in v0.4.0)
 
-```bash
-wind next
-```
-
-`wind next` names the one thing to do now in this session, from real state: it reads the session manifest, local git (uncommitted files, commits against the session's base, whether the branch is pushed), and — when something is pushed to review — the PR and its checks via `gh`. The output is a small readout: a `state` line, a `next` line with the exact command to run, and an occasional `note` when wind couldn't look somewhere (a blind spot is named, never silently read as "nothing there").
-
-It never mutates anything and never runs the command it names. Outside a wind session it says so and points at `wind up`; without a git repo, or with `gh` missing or signed out, the readout says which signal it lost and what it could still see.
-
-Exit: 1 for an unexpected argument (the command takes none in v1). Otherwise 0 — the readout is the product, even when the answer is "nothing to do right now".
+The next-action command introduced in v0.3.9 has been removed. Git and PR state do not establish whether work is complete or which action is appropriate. For session orientation, read `.session-state.json`, verify the worktree and branch with git, and inspect the PR with `gh`. Feature wrap-up performs these checks directly; the human still decides when a draft is ready.
 
 ## wind agent
 
 ```bash
 wind agent
-wind agent claude|codex|antigravity
+wind agent claude|codex
 ```
 
 `wind agent` prints the coding agent that `wind up` launches when that command has no explicit `--agent` flag. Pass an agent name to set that preference. It is stored in `~/.windstream/config.json`; existing installs with no preference continue to use Claude Code. An invocation-level flag always wins, for example `wind up feature mcp-bridge --agent codex`.
 
-Claude Code keeps its named `/windstream-connect` launch. Codex (`codex`) receives the stored Wind token only in its child-process environment, then starts with `$windstream-connect`; selecting Codex with no stored Wind credential refuses up front — before any branch or worktree is created — with a pointer at `wind auth login`. After Codex exits, wind consumes the hook's trace-ready notification and uploads the durable spool; traces spooled without a bound Wind Stream session are named loudly (count and reason) rather than promised a retry no drain can deliver. Antigravity (`agy`) opens its interactive CLI in the prepared worktree without MCP/hooks. A missing executable is reported as a launch failure, and `wind up` returns that agent process's exit code.
+Claude Code keeps its named `/windstream-connect` launch. Codex (`codex`) receives the stored Wind token only in its child-process environment, then starts with `$windstream-connect`; selecting Codex with no stored Wind credential refuses up front — before any branch or worktree is created — with a pointer at `wind auth login`. After Codex exits, wind consumes the hook's trace-ready notification and uploads the durable spool; traces spooled without a bound Wind Stream session are named loudly (count and reason) rather than promised a retry no drain can deliver. A missing executable is reported as a launch failure, and `wind up` returns that agent process's exit code.
 
-Changing the preference does not rewrite any agent configuration by itself. Run `wind setup` afterward to configure the newly selected integration. The Codex setup path touches only Codex's MCP, hooks, and skill; it does not modify Claude Code or Antigravity configuration.
+Antigravity is no longer supported as of v0.4.0. If it is your stored default, wind reports an unsupported-agent error; run `wind agent claude` or `wind agent codex`, then `wind setup`, to choose and configure a supported agent.
+
+Changing the preference does not rewrite any agent configuration by itself. Run `wind setup` afterward to configure the newly selected integration. The Codex setup path touches only Codex's MCP, hooks, and skill; it does not modify Claude Code configuration.
 
 Exit: 1 for an unsupported agent or if the preference file is malformed/unreadable/unwritable. Otherwise 0 after printing the current preference or durably replacing it while preserving any other config keys.
 
@@ -163,19 +167,23 @@ Exit: 1 if you're not authenticated (run `wind auth login` first), or with a usa
 ## wind down
 
 ```bash
-wind down [--easy] [--inline] [--yes] [--message <text>]
+wind down [--interview] [--inline] [--yes | --message <text> | --message-file <path>]
 ```
 
-`wind down` opens the same kind of full-screen conversation as `wind surf`, framed as a retrospective for this session: Wind Stream asks what happened, you tell it straight, and the exchange writes back to the Wind Stream session this worktree is attached to. Type `/exit` when you're done. You don't have to run it — the SessionEnd hook already returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not; running it adds your own account on top of that trace, it doesn't replace it.
+`wind down` drafts a retrospective from this seat's own work — its own PRs and the agent sessions bound to this worktree, falling back to the branch's commits only when GitHub can't answer — and shows it with what wind verified and what it couldn't. On a review seat (one cut with `wind up review`), the draft says what the review found and never credits the reviewed PR's features to the seat. Then it asks *anything to add?* with three choices: **Down (record)**, **Add something**, **Cancel**. Choose Down to record it to the Wind Stream session this worktree is attached to, or Add something to type an addition (typing `down` there records it). No retrospective is recorded until you say `down`; Cancel (or `/exit`) records none, and the draft exchange stays on the session as context. You don't have to run it — the SessionEnd hook already returns a trace of the session to Wind Stream automatically when the coding session ends, `wind down` or not; running it adds your own account on top of that trace, it doesn't replace it.
 
-- `--easy` — skip the interview. Wind Stream generates a short, accurate summary of the commits on this branch up front; you approve it as-is, edit it before it's recorded, or cancel and write nothing. At most one write, and it's yours to sign off on either way.
-- `--inline` — render line by line instead of taking over the full screen. For running `wind down` inside another tool's own terminal (a Claude Code session, say), where a full-screen takeover would fight with the surrounding UI.
-- `--yes` — with `--easy`, record the generated summary without prompting: no approve/edit/cancel menu, it just writes. Needs `--easy` — the full interview has no single summary for a flag to approve on your behalf.
-- `--message <text>` — with `--easy`, skip the generated summary too: the argument itself is your retrospective, recorded verbatim (whitespace and all). There's no approve step because there's nothing to approve — you wrote the words, and supplying them is the acceptance. Also needs `--easy`. For a retrospective you keep in a file, let the shell hand the text over: `wind down --easy --message "$(cat retro.md)"`, or `--message "$(cat)"` to type/pipe it in. wind never treats the argument as a path, so a value that looks like a flag (`--message --yes`) or a bare `-` is refused up front rather than recorded as your words.
+- `--interview` — the full free-form retrospective conversation (a full-screen exchange like `wind surf`, framed as a retrospective), which was the default before v0.4.0. Type `/exit` when you're done. It cannot be combined with `--yes`, `--message`, or `--message-file`: an interview has no single text to approve, and wind refuses the combination.
+- `--inline` — render line by line instead of taking over the full screen. For running `wind down` inside another tool's own terminal (a Claude Code session, say), where a full-screen takeover would fight with the surrounding UI. Orthogonal to everything else: it picks how it's drawn, not what's generated.
+- `--yes` — record the generated draft without asking: no menu, it just writes. Unattended scripts only (CI). Never from an agent session, where the user approves with `down`.
+- `--message <text>` — record `<text>` exactly as the user approved it, for a short literal typed at your own terminal. To pipe text in, let the shell hand it over: `wind down --message "$(cat)"`. wind never treats the argument as a path, so a value that looks like a flag (`--message --yes`) or a bare `-` is refused up front rather than recorded as your words.
+- `--message-file <path>` — record the file's contents verbatim, byte for byte, as the retrospective. This is how an agent records: it runs `wind down` with no flags to get the brief, shows the draft, and once the user says `down`, writes the draft the user approved to a file with its own file tool and passes the path (the brief prints the command), so the words never pass through shell quoting (a heredoc inside `$(...)` inside a quoted argument is where long text gets mangled, and on a write-forward session a mangled turn is permanent). The file is also the draft itself, so it can be read before it is recorded. The path must name a regular file of at most 1 MiB: a directory, a device, a larger file, or a path that cannot be read is a usage error before anything is written; a flag-shaped path and a bare `-` are refused like `--message`'s; `--message` and `--message-file` together is refused.
+- `--easy` — accepted for compatibility with v0.3.x scripts and does nothing; the quick draft is the default now.
 
-`--easy` and `--inline` are strictly orthogonal — one picks what gets generated (a quick summary instead of the interview), the other picks how it's drawn (line-by-line instead of full-screen). Either flag works with or without the other. `--yes` and `--message` both let the `--easy` path run unattended (CI, scripts) instead of waiting on a menu nobody is there to answer — `--yes` is the approval you'd have typed at that menu, `--message` skips the menu entirely by supplying the retrospective itself.
+`--yes`, `--message`, and `--message-file` no longer need any other flag.
 
-Exit: 1 if you're not authenticated (run `wind auth login` first), with a usage line for an unrecognized flag, for `--yes`/`--message` without `--easy`, or for a `--message` value that looks like a flag or is a bare `-`. `wind down --easy` also exits 1 at a non-interactive terminal if you give it neither `--yes` nor `--message` — it refuses up front rather than hang waiting on a menu that will never get an answer. Otherwise 0: a deliberate cancel writes nothing and exits 0, same as a worktree with no Wind Stream session attached (`wind down` says so and returns without opening the TUI) — unless the ask was non-interactive (`--yes` or `--message`), in which case asking to record with nothing to record into is a 1. With `--easy --yes` or `--message`, exit 0 means your words are durably saved — delivered right away, or spooled to sync on a later session start if Wind Stream can't be reached right now (offline, or your token needs a refresh); the one other 1 is a save that fails everywhere, locally and on Wind Stream both.
+Without a terminal and without `--yes`, `--message`, or `--message-file`, `wind down` prints its refusal (exit 1, nothing recorded) and then, when a Wind Stream session is attached, a self-review brief for the agent driving the run. The agent holds the whole session, so it writes the retrospective itself and records it with `wind down --message-file` once you say `down`.
+
+Exit: 1 if you're not authenticated (run `wind auth login` first), with a usage line for an unrecognized flag, for a `--message` value that looks like a flag or is a bare `-`, for a `--message-file` path that is flag-shaped, a bare `-`, or cannot be read, or for `--message` and `--message-file` together. Non-interactive and unattended runs follow the refusal rule above. Otherwise 0: a deliberate cancel records no retrospective and exits 0, same as a worktree with no Wind Stream session attached (`wind down` says so and returns) — unless the ask was non-interactive (`--yes`, `--message`, or `--message-file`), in which case asking to record with nothing to record into is a 1. When a retrospective is recorded, the exit code says what happened to your words, the same three-way contract `wind sync` and `wind eval publish` use: **0** delivered to Wind Stream; **2** saved but not sent — spooled locally because Wind Stream couldn't be reached (offline, or your token needs a refresh), to sync on a later session start, and the receipt names the entry so `wind sync <entry>` delivers it now; **1** nothing saved anywhere, locally or on Wind Stream, in which case the words are printed to copy. (Before 0.4.0, spooled exited 0.)
 
 ## wind eval
 
@@ -221,6 +229,9 @@ wind proxy run [--config <path>] [--once] [--record <slug> [--record-max <n>]]
 wind proxy record <slug> --from <url> --requests <file> [--out <dir>] [--unsafe] [--generator <text>] [--config <path>] [--force]
 wind proxy record <slug> --transport exec --command "<cmd> {input}" --inputs <dir> [--out <dir>] [--media-type <type>] [--timeout-ms <n>] [--generator <text>] [--config <path>] [--force]
 wind proxy replay <set-dir | paths-file> [--against <url | "cmd {input}">] [--transport http|exec] [--service <slug>] [--window <id>] [--out <dir>] [--media-type <type>] [--timeout-ms <n>] [--unsafe] [--no-evidence] [--config <path>]
+wind proxy push <set-dir> [--config <path>]
+wind proxy pull <set-id> --version <set-version-id> --out <dir> [--config <path>]
+wind proxy replay --set <set-id> --version <set-version-id> --against <url | "cmd {input}"> [--transport http|exec] [--service <slug>] [--window <id>] [--out <dir>] [--media-type <type>] [--timeout-ms <n>] [--unsafe] [--no-evidence] [--config <path>]
 wind proxy replay --divergence <id> --against <url> [--proxy <url>] [--media-type <type>] [--timeout-ms <n>] [--config <path>]
 ```
 
@@ -249,6 +260,7 @@ A set is a directory: `manifest.json` (identity, stage, provenance, transport, e
 - `--timeout-ms <n>` — per-entry timeout (default `30000`).
 - `--unsafe` — record and replay methods other than `GET` and `HEAD`.
 - `--no-evidence` — `replay`: compare and report locally, post nothing.
+- `--set <set-id>`, `--version <set-version-id>` — `replay` and `pull`: one exact version of a set pushed to Wind Stream with `wind proxy push`. There is no `latest`: the version is always named, so a later upload cannot change what you replay. `pull` verifies the manifest and every payload before it writes `--out`. See [proxy.md](proxy.md) for the push, pull, replay walkthrough.
 - `--divergence <id>`, `--proxy <url>` — `replay`: reproduce one divergence from the proxy running at `--proxy` (default: the config's port) in the `none` custody mode.
 - `--generator <text>` — `record`: the name and version of the system whose answers were recorded.
 
@@ -260,7 +272,44 @@ Exit (`run`): 1 if the config is missing or malformed, for a token problem, if t
 
 Exit (`record`): 1 for bad arguments, an existing set directory without `--force`, an unreadable requests file or inputs directory, a named config that can't be read, or any entry that failed at the transport; 0 once the set is written (entries the truth answered with an error status are recorded as such).
 
-Exit (`replay`): 1 for bad arguments, a set that fails integrity, no target, a token problem when evidence is on or when custody is `windstream` (both need one), or any entry that failed at the transport; 0 when every entry was issued, divergences included.
+Exit (`replay`): 1 for bad arguments, a set that fails integrity, no target, a token problem when evidence is on or when custody is `windstream` (both need one), or any entry that failed at the transport; 0 when every entry was issued, divergences included; 2 when every entry was issued but the parity evidence could not be delivered.
+
+## wind factory
+
+```bash
+wind factory install [--into <dir>] [--force]
+wind factory intake | dispatch | sweep | gate-sweep | health | charters | selftest
+wind factory labels [<owner/repo>]
+wind factory gate <pr> | capture <pr> [opened|ready|merged|closed|manual]
+wind factory preflight <owner/repo> <pr>
+wind factory launch <issue> [<base-branch>] [<custom-agent>]
+wind factory triage <run-id>
+wind factory brief "<task title>" [<user-id>…] | share <session-id> [<user-id>…]
+wind factory brief-ref | base-branch <owner/repo> [<base>] | hold | loop-facts | scores-parse | eligible   (input on stdin)
+wind factory no-human <owner/repo> <pr> [--out-json <f>] [--out-md <f>] [--out-ndjson <f>]
+wind factory agent-log parse|emit <log> [options…]
+wind factory otel init|span-start|span-end|event|flush <job> [args…]
+wind factory mcp <method> [<params-json>] | mcp tools/call <tool> [<args-json>]
+wind factory scripts [--into <dir>] [--force]
+```
+
+`wind factory` is the Wind Stream software factory: a person writes a brief in a Wind Stream session titled `FACTORY: …` (or labels an issue `factory-build` + `sprint-ready`), and the factory does the rest — intake opens the issue, dispatch launches the Copilot cloud agent against the repository's `factory-build` branch, the sweep readies the PR, lifts CI, nudges the agent on a dead session or red CI, and hands a green, gate-OK head to a person with the hold table and the no-human proof, while the gate sweep asks the brief session for a verdict on every unjudged head. A person merges. The guide is [wind factory](factory.md); this section is the verb reference.
+
+`install` writes the repository's triggers — the four thin workflows `.github/workflows/windstream-{intake,gate,ci-triage,launch}.yml`, the Copilot hooks under `.github/hooks/`, the `windstream-issue` / `windstream-pr` agents, `.github/copilot-instructions.md`, `.github/copilot/mcp-servers.json`, the issue template, and the two helpers the hooks fall back to inside the Copilot sandbox, where wind is not on PATH (`scripts/factory/brief-ref.sh`, `scripts/factory/ws-mcp.sh`) — into the current git repository (or `--into <dir>`), and adds `.factory/` to its `.gitignore` (the hooks' per-session state). The workflows check out `FACTORY_BASE_BRANCH`, install this wind version from the `windstreamai/wind-cli` release on every run, and call the verbs below, so the mechanics live in wind and move with its version: re-run `install` after upgrading wind to move the pin: a file whose only difference from what this wind ships is the pin is `updated` ("moved the wind pin"; a file written by an earlier wind whose template has since changed is not recognised — windstreamai/wind#332). Any other existing file that differs is kept and reported as `skipped`; `--force` overwrites it — including a file you edited on purpose, such as the triage trigger's `workflows:` list, so after an upgrade move that one file's wind pin by hand. The triggers run only from the default branch's workflow files, so commit them there. No project-scope `.mcp.json` is written: a project `windstream` server shadows the one configured at user scope. `install` ends with the once-per-repository steps an admin completes.
+
+Every other verb runs one of the lane's scripts. The scripts ship inside the binary and are unpacked, once per wind version, under `~/.windstream/factory/<version>/scripts/` (`selftest` unpacks the repo-side set beside them under `repo/`, so the guard self-test can reach the hook it tests); the verb execs the script with the current git repository as its working directory (`FACTORY_REPO_ROOT`), so `gh` and `git` see the repository you are in. They need `bash` and `python3` on PATH — macOS, Linux, WSL, or GitHub Actions; a verb refuses up front when either is missing — and the scripts themselves use `gh` (2.88 or later for `launch`), `curl`, and `jq`, and say so when one is absent. On macOS, `intake` and `sweep` also need Homebrew bash (4+) and coreutils (GNU `date`) until windstreamai/wind#330 lands upstream. Everything wind itself says — a refusal, a notice, a failed self-test — goes to stderr; a verb's stdout is its script's (the hooks parse `brief-ref`'s). The scripts also see `WIND_FACTORY_DIR` and `WIND_FACTORY_VERSION` (where the tree was unpacked, and by which wind). The unpack is repaired only when the bundle changes (a digest marker, written last); a tree edited or damaged by hand is restored by removing `~/.windstream/factory/<version>/` and running any verb, and old versions' directories are never pruned. When the environment carries no `WINDSTREAM_MCP_TOKEN` (or `COPILOT_MCP_WINDSTREAM_TOKEN`), your stored wind token is passed as `WINDSTREAM_MCP_TOKEN`, so `wind auth login` is enough to run a verb by hand. Verbs marked "input on stdin" read what the scripts pipe to them.
+
+- `intake` — `FACTORY:` sessions whose `Repo:` line matches become issues labelled `factory-build` + `sprint-ready`, one per session; it never launches. `dispatch` — the serialized label dispatcher: claims one eligible issue, launches it, and leaves `factory-building` or `factory-failed`; a no-op until `FACTORY_DISPATCH_ENABLED=true`, and `FACTORY_CANARY_ISSUES` is a strict ordered allow-list.
+- `sweep` — the lifecycle, as the factory login (`FACTORY_ASSIGN_TOKEN`): ready a finished draft, lift the CI hold (approve the held runs, else an empty commit), nudge a dead session or red CI three times then `factory-stuck`, label `factory-budget` on Copilot's usage limit, and hand a green, gate-OK head to a person once per head: hold table, no-human proof, `factory-ready`, `FACTORY_REVIEWERS`, receipt. `FACTORY_RESUME=true` clears the stops; `FACTORY_SWEEP_DRY_RUN=1` decides and prints, writing nothing.
+- `gate-sweep` — a verdict for every open non-draft head not yet judged; `gate <pr>` — preflight the immutable head, find the brief through an explicit pointer only, attach the diff and the touched files, ask the brief session, post the verdict as a comment and a `windstream-gate` commit status, score it for `/evals`; a BLOCK is posted as `@copilot` and wakes the agent. `preflight <owner/repo> <pr>` is the head check alone (exit 3 for a non-open PR).
+- `capture <pr> <event>` — the receipt into the brief session; on merge or close also the verdict-quality and loop-outcome facts and the executor trace from the Copilot session log.
+- `launch <issue> [base] [agent]` — `gh agent-task create` with the base from `base-branch` (argument → `Base branch:` line → `FACTORY_BASE_BRANCH` → default branch) and the custom agent; refuses rather than fall back when the base is not the default branch. `triage <run-id>` — a failed run of the named CI workflow on `main`/`release/*` becomes a `FACTORY: CI failure` session, an issue, and (when armed) a launch against the failing branch.
+- `brief "<title>" [ids…]` — a factory-owned `FACTORY:` session shared with `FACTORY_SHARE_IDS`; `share <session-id> [ids…]` — share a session the factory owns. `labels [<owner/repo>]` — create or update the factory labels. `health` — both credentials (exit 0 connected, 1 expired, 2 unreachable, 3 MCP token unset, 4 degraded). `charters` — the five eval charters as one NDJSON envelope for `wind eval publish`; it reads them from the repository's own `api/evals/charters/`, so it is for repositories that author charters. `selftest` — the lane's eleven self-tests.
+- `brief-ref`, `base-branch`, `hold`, `loop-facts`, `scores-parse`, `eligible`, `no-human`, `agent-log`, `otel`, `mcp` — the pure parts the scripts call: the brief-pointer rule, base-branch resolution, the hold (`Checks:` lines against the head's CI), the eval facts, the gate's scores block, dispatch selection, the no-human proof, the Copilot session-log reader, the OTLP emitter, the raw JSON-RPC client.
+
+Variables the scripts read: `WINDSTREAM_MCP_TOKEN`, `FACTORY_ASSIGN_TOKEN` (secrets); `FACTORY_BASE_BRANCH` (the old `FACTORY_RELEASE_BRANCH` is honoured while the new one is unset), `FACTORY_ASSIGN_LOGIN`, `FACTORY_SHARE_IDS`, `FACTORY_MENTION_IDS`, `FACTORY_REVIEWERS`, `FACTORY_DISPATCH_ENABLED`, `FACTORY_DISPATCH_LIMIT` (1), `FACTORY_CANARY_ISSUES`, `FACTORY_RESUME`, `FACTORY_RESUME_NUDGES` (3), `FACTORY_CI_NUDGES` (3), `FACTORY_CI_WORKFLOW` (the CI workflow's `name:`, default `CI`), `FACTORY_SWEEP_DRY_RUN`, `FACTORY_AGENT_LOG_FILE`, `FACTORY_OTEL_DIR`, `WINDSTREAM_OTLP_URL`, `WINDSTREAM_MCP_URL`, `WS_MCP_TIMEOUT`.
+
+Exit: 1 with a usage line for an unknown verb, a wrong argument count, a PR or issue number that is not a number, a repository that is not `owner/repo`, a session id that is not `session-<id>`, or an `agent-log` / `otel` operation the script does not have; 1 (message on stderr) when `bash` or `python3` is missing (a missing `gh`, `curl`, or `jq` surfaces as the script's own exit code), or the scripts cannot be unpacked under `~/.windstream`; for `install` and `scripts`, 1 if any file could not be written (the others still land), else 0. For every scripted verb, the script's own exit code.
 
 ## wind attach
 
@@ -290,11 +339,34 @@ Exit: 1 with a usage line for bad arguments; for no session bound anywhere (poin
 Deliver what is waiting to upload, or see why it is waiting.
 
 ```bash
-wind sync                              # deliver everything deliverable now; receipt per entry
-wind sync status                       # list what is waiting, with the next action for each
-wind sync <entry> [--session <ref>]    # deliver one entry, optionally to a session you name
-wind sync drop <entry> [--yes]         # discard one entry (asks first; names it in full)
+wind sync [--plain]                                         # deliver everything deliverable now; receipt per entry
+wind sync status [--json | --plain]                         # list what is waiting, with the next action for each
+wind sync <entry> [--session <ref>] [--use-current-host]    # deliver one entry, optionally to a session or host you name
+wind sync drop <entry> [--yes]                              # discard one entry (asks first; names it in full)
 ```
+
+In an interactive terminal, `wind sync` opens a live queue view and starts uploading.
+`wind sync status` opens the same view without sending anything. The view shows worktree
+names, delivery counts, the upload in progress, and guidance for the selected entry.
+Use **↑/↓** to select, **s** to sync all, **r** to retry the selected entry, **b** to
+enter a destination session ID or URL, **h** to move a mismatched entry to the current
+host, and **d** to discard an entry. Host changes show the old and new hosts and require
+**y** to save the change and retry that entry. If no session is connected, the view
+asks for its destination first, then confirms and applies both changes together.
+Canceling leaves the entry unchanged. Empty or unreadable records offer discard only;
+changing their host or session cannot make them deliverable. In the discard dialog,
+**Y** is the default: **Enter**, **y**, or **Y** confirms; **n** or **Esc** keeps the entry.
+**Esc** cancels a dialog. **q** or **Esc** closes the
+view; during delivery it waits for the current sync to finish and release its lock.
+The view stays open after sync so you can inspect or resolve remaining entries.
+When the saved worktree URL disagrees with its recorded session ID, a same-host URL
+can appear as an **unverified** destination suggestion. **b** prefills it for review;
+the entry changes only when you submit. Missing, unreadable, unrelated-worktree, and
+cross-host manifests do not provide suggestions. New server failures distinguish
+**Not found (404)** from **Access denied (403)**; older records without a saved status
+show **Session unavailable**.
+Use `--plain` to return immediately after the pass. Redirected or piped output uses
+the plain format automatically.
 
 Traces, retrospectives, and eval publishes that could not be delivered wait under
 `~/.windstream/spools/`. Every session start drains that queue on its own, so `wind sync`
@@ -305,16 +377,28 @@ connected, a trace over the server's size cap, an expired token you have since r
   against. For an entry whose worktree was never connected, or whose session has since
   been deleted.
 - `--yes` — with `drop`, skip the confirm and discard immediately.
+- `--use-current-host` — with a named entry, explicitly move its saved destination
+  host to the current `WIND_HOST` (default `https://app.windstream.ai`) and retry it.
+  This affects only that entry and clears multipart state belonging to the old host.
+  It can be combined with `--session <ref>` when the destination session must change too.
+- `--json` — with `status`, one document (`"schema": "wind.sync.status/1"`) instead of the listing: `entries`, one per queue entry with `id`, `short_id`, `kind`, `state` (`pending`, `held`, or `unreadable`), `reason`, `session_ref` and `worktree` (`null` when unbound), `host`, `size_bytes`, `spooled_at`, `age_seconds`, `attempts`, `last_outcome` and `last_attempt_at` when there was one, `next_action` (the same fixed copy the listing prints, without its arrow), `sidecar_path`, `payload_path`; and `counts` (`waiting`, `pending`, `held`, `unreadable`). An unreadable entry carries only its ids, paths, and next action. An empty queue is `"entries": []` with zero counts.
 
 `wind sync status` shows each entry as **pending** (it will be retried) or **held** with a
 reason: `over-cap` (kept locally until the platform can take it in parts), `no-session`
 (name one with `--session`), `no-transcript` (the session ended with nothing to send),
 `host-mismatch` (belongs to another Wind Stream host — `WIND_HOST=<host> wind sync`
-delivers it there, or drop it), `no-access` (the session refused it — deleted, or no
-access; name another with `--session`, or drop it), `gated` (eval publish, waiting on a
+delivers it there, or drop it), `no-access` (the session refused it, a 403; name another with `--session`, or drop it),
+`not-found` (the session does not exist on that host, a 404; name another with
+`--session`, or drop it), `gated` (eval publish, waiting on a
 platform change). An entry whose sidecar cannot be read at all is listed as
 **unreadable** with its path — nothing can deliver it, so the listed action is
 `wind sync drop <entry>`, and it is counted among the held.
+
+The queue is global: run `wind sync` from any directory, including outside a worktree.
+A broken entry does not block later traces or unrelated retrospectives. A local read or
+write failure stays visible as `local-error`; `wind trace` gives the diagnosis. Empty
+trace records remain held as `no-transcript`, including after a host change. A failed
+drain exits `2` and reports the failure instead of claiming the queue is clear.
 
 Only one drain runs at a time on a machine: `wind sync` shares its lock with the drain a
 session start spawns and the one that follows a Codex session, so the same retrospective
@@ -327,8 +411,9 @@ still pending or held (including when another drain holds the lock), `1` when re
 `wind sync status` always exits `0`; `wind sync drop` exits `0` when it discarded, `1`
 when refused or declined.
 
-`wind status` prints one line when the queue is non-empty, and `wind down` opens with the
-queue's state for the worktree you are closing.
+`wind status` prints one line when the queue is non-empty — the whole machine's queue, every
+worktree's spool, and the line says so — and `wind down` opens with the queue's state for the
+worktree you are closing.
 
 ## wind open
 
@@ -369,9 +454,8 @@ wind setup
 
 - **Claude Code (the compatibility default):** registers SessionStart/SessionEnd hooks, deploys `windstream-*` slash commands to `~/.claude/commands`, and registers the user-scoped Wind Stream MCP.
 - **Codex:** registers the native Streamable HTTP MCP with an environment-backed bearer, installs lifecycle hooks in `~/.codex/hooks.json`, and deploys `$windstream-connect` to `~/.agents/skills/windstream-connect`. Codex requires a one-time review/trust action from `/hooks`; setup reports installation, not trust.
-- **Antigravity:** remains launcher-only and has no native setup path in this change.
 
-Setup is idempotent — re-run it after changing to Codex, after a token rotates, or after moving machines. The Codex path never reads or writes Claude Code or Antigravity configuration; the existing Claude path is unchanged.
+Setup is idempotent — re-run it after changing to Codex, after a token rotates, or after moving machines. The Codex path never reads or writes Claude Code configuration; the existing Claude path is unchanged.
 
 No arguments or flags.
 
@@ -408,14 +492,25 @@ Exit: always 0.
 ## wind status
 
 ```bash
-wind status
+wind status [--json]
 ```
 
-`wind status` reports readiness of the coding tools wind knows how to launch — Claude Code, Codex, and Antigravity: whether each is installed, signed in, and its version. It's distinct from `wind setup`'s readout (wind's own connection to the selected agent — hooks, MCP, command/skill) and from `wind doctor`'s Claude-oriented diagnostics bundle (a captured, shareable snapshot for a bug report) — `status` is a quick, live probe of the tools themselves.
+`wind status` reports readiness of the coding tools wind knows how to launch — Claude Code and Codex: whether each is installed, signed in, and its version. It's distinct from `wind setup`'s readout (wind's own connection to the selected agent — hooks, MCP, command/skill) and from `wind doctor`'s Claude-oriented diagnostics bundle (a captured, shareable snapshot for a bug report) — `status` is a quick, live probe of the tools themselves.
 
-No arguments or flags.
+- `--json` — the same facts as one document instead of the readout, for a script or a coding agent:
 
-Exit: always 0.
+  ```json
+  {
+    "schema": "wind.status/1",
+    "invocation": { "mode": "agent-attended", "presentation": "text", "reason": "harness-attended", "harness": "claude-code" },
+    "tools": [ { "name": "Claude Code", "installed": true, "signed_in": true, "version": "2.1.286", "ready": true } ],
+    "queue": { "scope": "machine", "waiting": 1, "pending": 0, "held": 1, "unreadable": 0 }
+  }
+  ```
+
+  `invocation` is how wind saw this run (see the global flags above; `forced` appears when `--tui`/`--no-tui` decided it). `queue` counts the upload queue for the whole machine — every worktree's spool, which is what `scope: "machine"` says: on a machine running many sessions, a held count here is not this seat's (the per-worktree view is `wind down`'s opening lines, and `wind sync status --json` carries each entry's `worktree`). When the queue could not be read at all it is `null` and `queue_unresolved: "read-failed"` says so, which is not the same as an empty queue. The `schema` tag names the shape; a changed shape gets a new tag.
+
+Exit: always 0 (1 for an unknown flag).
 
 ## wind --version
 
@@ -424,6 +519,8 @@ wind --version
 ```
 
 Prints the installed version and exits. `-v` and `version` are aliases.
+
+A binary you built yourself (`bun run build`) reports its git state after a `+`, as semver build metadata: `0.4.0+dev.760b7d2`, or `0.4.0+dev.760b7d2.dirty` when the tree had uncommitted changes. Release binaries report the bare version.
 
 Exit: always 0.
 
@@ -435,7 +532,7 @@ wind <command> --help    # one command's usage and flags
 wind help <command>      # same page, help-verb form
 ```
 
-Bare `wind --help` prints the command index reproduced at the top of this reference; `-h`, `help`, and running `wind` with no arguments at all are aliases. With a command — `wind down --help`, `wind down -h`, `wind help down`, or git-style `wind --help down` — it prints that command's own page: summary, usage grammar, and flags. The flag wins from any position (`wind up feature --help` shows `up`'s page rather than starting a session), and it is intercepted before the command runs, so `--help` can never trigger the command it's asking about.
+Bare `wind --help` prints the command index reproduced at the top of this reference; `-h`, `help`, and running `wind` with no arguments at all are aliases. With a command — `wind down --help`, `wind down -h`, `wind help down`, or git-style `wind --help down` — it prints that command's own page: summary, usage grammar, the command's effect (`read`: it leaves nothing behind; `write`: it records, queues, or changes something, with any read-only sub-verbs named, as in `Effect: write (wind sync status: read)`), and flags. The flag wins from any position (`wind up feature --help` shows `up`'s page rather than starting a session), and it is intercepted before the command runs, so `--help` can never trigger the command it's asking about.
 
 Exit: 0, or 1 for help on a command that doesn't exist (`wind help bogus` — the unknown-command path; a flag-shaped token gets `unknown help topic` instead).
 
@@ -446,3 +543,4 @@ These are normally run *for* you — wind's own hooks invoke `wind hook`, and th
 - **`wind hook <session-start|session-end|session-end-spool|drain>`** — invoked by the lifecycle hooks `wind setup` registers. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. Claude's `session-end` uploads within its hook budget or spools on failure. Codex's internal `session-end-spool` performs no network work: it durably spools, writes a trace-ready marker, and returns within Codex's three-second ceiling; the parent `wind up` process drains the spool after Codex exits. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also spawns one detached, lock-guarded `wind hook drain` child — also plumbing, spawned automatically, never something you run yourself — that flushes every kind waiting in the home-level spool queues (`~/.windstream/spools/`; [`wind sync`](#wind-sync) is the command form of the same queue). No upload happens inside a hook budget, so a trace post at API scale and a conversation reply at LLM latency both finish without delaying your session.
 - **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. The ref is normalized at this boundary: `session-<id>` passes through, a pasted session URL has its id extracted, and a bare id gets the prefix — anything else is refused, naming the three shapes, so a ref that can't be read is caught here rather than becoming an upload that silently goes nowhere. What lands in the manifest is always the canonical `session-<id>`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.
 - **`wind trace [--run <id>] [--json]`** — inspect wind's own trace output: the events each `wind` invocation logs while it runs. Bare `wind trace` prints the most recent run, pretty-printed; `--run <id>` picks an older one by matching its filename; `--json` prints raw JSON lines instead of the pretty form. Exits 0, or 1 if `--run <id>` matches nothing or an unknown flag is passed.
+- **`wind trace brief`** — print the extract of the agent sessions bound to this worktree: your own messages, Wind Stream and peer turns, and the agent's last message per turn, with terminal escapes stripped. It ends with a footer counting the sessions read and not read (a session with no recorded transcript counts as not read); with nothing bound it says so. Takes no flags. Exits 0, or 1 if given an argument.

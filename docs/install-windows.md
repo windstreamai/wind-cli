@@ -1,6 +1,6 @@
 # Install wind (Windows)
 
-`wind` is the Wind Stream CLI. Instead of launching your coding tool directly, you run `wind up` — it prepares the worktree and session manifest, then launches your selected coding agent. Claude Code and Codex have connected MCP, connect, and trace-return paths; Antigravity remains launcher-only. Once you're installed and connected, [Getting started](getting-started.md) walks through the full loop.
+`wind` is the Wind Stream CLI. Instead of launching your coding tool directly, you run `wind up` — it prepares the worktree and session manifest, then launches your selected coding agent. Claude Code and Codex have connected MCP, connect, and trace-return paths. Once you're installed and connected, [Getting started](getting-started.md) walks through the full loop.
 
 > On macOS or Linux? See [install.md](install.md). This guide is PowerShell-first.
 
@@ -66,7 +66,7 @@ wind -v          # the version you installed — a stale wind.exe earlier on PAT
 
 ## 2. Connect to Wind Stream
 
-Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup prompts for a token and uses the Codex-specific path when Codex is selected; that path leaves Claude and Antigravity configuration unchanged. Generate a token in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**:
+Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup prompts for a token and uses the Codex-specific path when Codex is selected; that path leaves Claude configuration unchanged. Generate a token in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**:
 
 ```powershell
 wind agent codex   # optional; omit for Claude Code
@@ -148,4 +148,5 @@ See [Getting started](getting-started.md) for the full loop.
 - **Updating:** once winget is live, `winget upgrade WindStream.Wind`; until then, repeat the `gh` recipe above — replace `$HOME\bin\wind.exe` with the new build (`Move-Item … -Force`, or rename-then-replace if it's running), then re-run `wind setup` (idempotent). Restart Claude Code after its setup path; Codex reads its user configuration on the next launch. Always check `wind -v` afterward.
 - **Terminal host:** if the TUI renders garbled or won't restore under legacy `conhost`, switch to **Windows Terminal** (ConPTY).
 - **Troubleshooting:** the readout above (from `wind setup`) is the health check — every `✓` line is confirmation, not just a status. If something's off, `wind doctor` bundles the same state into a diagnostics file for a bug report; it's a snapshot for support, not a replacement for the readout.
+- **`wind factory`:** its verbs run the factory's bash and python scripts and need `bash` and `python3` on PATH (the scripts themselves use `gh`, `curl`, and `jq`) — run them from WSL (or let GitHub Actions run them). `wind factory install` is plain file writing and is expected to work from PowerShell, but has not been exercised there; run it from WSL anyway, so the hook scripts it writes keep their executable bit when committed.
 - **Non-default environments:** set `WIND_HOST` to your Wind Stream host before `wind setup` (default: `https://app.windstream.ai`).

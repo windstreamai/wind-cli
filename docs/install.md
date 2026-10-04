@@ -1,6 +1,6 @@
 # Install wind (macOS / Linux)
 
-`wind` is the Wind Stream CLI. Instead of launching your coding tool directly, you run `wind up` — it prepares the worktree and session manifest, then launches your selected coding agent. Claude Code and Codex have connected MCP, connect, and trace-return paths; Antigravity remains launcher-only. Once you're installed and connected, [Getting started](getting-started.md) walks through the full loop.
+`wind` is the Wind Stream CLI. Instead of launching your coding tool directly, you run `wind up` — it prepares the worktree and session manifest, then launches your selected coding agent. Claude Code and Codex have connected MCP, connect, and trace-return paths. Once you're installed and connected, [Getting started](getting-started.md) walks through the full loop.
 
 > On Windows? See [install-windows.md](install-windows.md).
 
@@ -57,7 +57,7 @@ wind agent codex   # only if Codex should be the default; Claude is the fallback
 wind setup
 ```
 
-It prompts for a token and uses the Codex-specific path when Codex is selected; otherwise it preserves the existing Claude setup. Generate one in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**. For Claude Code it registers hooks, adds the MCP, and deploys the `windstream-*` slash commands; restart Claude Code afterward. For Codex it registers the native remote MCP, installs hooks, and deploys `$windstream-connect` without changing Claude or Antigravity configuration; launch Codex once, open `/hooks`, and trust the Wind hooks when prompted.
+It prompts for a token and uses the Codex-specific path when Codex is selected; otherwise it preserves the existing Claude setup. Generate one in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**. For Claude Code it registers hooks, adds the MCP, and deploys the `windstream-*` slash commands; restart Claude Code afterward. For Codex it registers the native remote MCP, installs hooks, and deploys `$windstream-connect` without changing Claude configuration; launch Codex once, open `/hooks`, and trust the Wind hooks when prompted.
 
 ## 3. Verify
 
