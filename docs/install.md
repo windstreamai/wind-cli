@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - Claude Code or Codex CLI installed and signed in
-- `git`, and `gh` (the GitHub CLI) authenticated — needed to download the binary while the distribution repository is private, and used by `wind up` to work with your repos on GitHub
+- `git`, and `gh` (the GitHub CLI) authenticated — used by `wind up` to work with your repos on GitHub; public binary downloads do not require a GitHub login
 - A Wind Stream account with MCP access (token generated in step 2)
 
 ## 1. Install the binary
@@ -20,9 +20,9 @@ brew install windstreamai/tap/wind
 
 This becomes the standard path at the public launch — while the distribution repository is private, use the `gh` path below.
 
-### While this repository is private
+### Direct download
 
-During pipeline bring-up, `windstreamai/wind-cli` is private, so install with `gh` instead of `brew`. Pick the asset for your machine — `wind-darwin-arm64` (Apple Silicon), `wind-darwin-x64` (Intel Mac), or `wind-linux-x64` (Linux). Not sure which? `uname -m` tells you: `arm64` → Apple Silicon, `x86_64` → Intel Mac or Linux x64.
+Download a binary and `SHA256SUMS` from [Releases](https://github.com/windstreamai/wind-cli/releases). Public downloads need no GitHub login. While the repository is private, use the authenticated `gh` command below. Pick the asset for your machine — `wind-darwin-arm64` (Apple Silicon), `wind-darwin-x64` (Intel Mac), or `wind-linux-x64` (Linux). Not sure which? `uname -m` tells you: `arm64` → Apple Silicon, `x86_64` → Intel Mac or Linux x64.
 
 ```bash
 gh release download <tag> --repo windstreamai/wind-cli -p 'wind-darwin-arm64' -p SHA256SUMS
@@ -36,7 +36,9 @@ Find the current `<tag>` with:
 gh release view --repo windstreamai/wind-cli
 ```
 
-If macOS blocks the binary ("unverified developer"), clear the quarantine attribute:
+If migrating a manual install to Homebrew, use `type -a wind` to find an earlier copy on PATH. Move that copy aside, then confirm `command -v wind` points to the Homebrew install and re-run `wind setup`.
+
+If macOS blocks the directly downloaded binary ("unverified developer"), clear the quarantine attribute:
 
 ```bash
 xattr -d com.apple.quarantine /usr/local/bin/wind
@@ -57,7 +59,7 @@ wind agent codex   # only if Codex should be the default; Claude is the fallback
 wind setup
 ```
 
-It prompts for a token and uses the Codex-specific path when Codex is selected; otherwise it preserves the existing Claude setup. Generate one in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**. For Claude Code it registers hooks, adds the MCP, and deploys the `windstream-*` slash commands; restart Claude Code afterward. For Codex it registers the native remote MCP, installs hooks, and deploys `$windstream-connect` without changing Claude configuration; launch Codex once, open `/hooks`, and trust the Wind hooks when prompted.
+It prompts for a token and uses the Codex-specific path when Codex is selected; otherwise it preserves the existing Claude setup. Generate one in Wind Stream under **Settings → API Tokens**, paste it at the prompt, then press **Enter**. For Claude Code it registers hooks, adds the MCP, and deploys the `windstream-*` slash commands; restart Claude Code afterward. For Codex it registers the native remote MCP, installs hooks, and deploys `$windstream-connect` without changing Claude configuration; launch Codex once, open `/hooks`, and trust the Wind hooks when prompted.
 
 ## 3. Verify
 

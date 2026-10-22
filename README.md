@@ -10,21 +10,19 @@ This repository is for the released binaries
 
 ## Install
 
-> During the pipeline bring-up this repository is private and installs go
-> through `gh`; see the instructions on the current release. With the public
-> launch, the package-manager channels take over:
-
-**macOS / Linux (Homebrew)**
+**macOS / Linux (Homebrew)** — available once the distribution repos are public:
 
 ```bash
 brew install windstreamai/tap/wind
 ```
 
-**Windows (winget)**
+**Windows** — download `wind-windows-x64.exe` and `SHA256SUMS` from
+[Releases](https://github.com/windstreamai/wind-cli/releases), then follow the
+[Windows install guide](docs/install-windows.md) to verify and install it.
+The winget listing is pending; public downloads do not require a GitHub login.
 
-```powershell
-winget install WindStream.Wind
-```
+While the distribution repos are private, use the authenticated `gh` instructions
+on the current release.
 
 After any install: `wind setup` deploys the Wind Stream integration (hooks,
 MCP, `windstream-*` commands).
@@ -36,6 +34,6 @@ Full documentation lives in [docs/](docs/README.md) — install, getting started
 ## License
 
 Proprietary — see [EULA.md](EULA.md), governed by the
-[Wind Stream Terms of Service](https://windstream.ai/terms-of-service).
+[Wind Stream Terms of Use](https://windstream.ai/legal/tos).
 
 Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

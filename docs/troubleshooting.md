@@ -42,7 +42,7 @@ Fix: run wind from Windows Terminal instead of legacy `conhost`. Any of `/exit`,
 
 Everything that talks to Wind Stream — the CLI, the MCP, the session-end hook — uses the one token `wind auth` manages. A 401, or a command reporting you're not authenticated, means that token is missing, expired, or was revoked.
 
-Fix: run `wind auth status` to see whether a token is stored and whether Wind Stream still considers it live. If not, generate a fresh one in Wind Stream under **Settings → MCP Token** and run `wind auth login` — it also refreshes the selected MCP registration. Claude's stored header is replaced; Codex's environment-backed entry is reconciled without storing the token there. See [wind auth](commands.md#wind-auth).
+Fix: run `wind auth status` to see whether a token is stored and whether Wind Stream still considers it live. If not, generate a fresh one in Wind Stream under **Settings → API Tokens** and run `wind auth login` — it also refreshes the selected MCP registration. Claude's stored header is replaced; Codex's environment-backed entry is reconciled without storing the token there. See [wind auth](commands.md#wind-auth).
 
 ## Wrong or unreachable environment
 

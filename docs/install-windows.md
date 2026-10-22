@@ -7,30 +7,32 @@
 ## Prerequisites
 
 - Claude Code or Codex CLI installed and signed in
-- `git`, and `gh` (the GitHub CLI) authenticated — needed to download the binary while the distribution repository is private, and used by `wind up` to work with your repos on GitHub
+- `git`, and `gh` (the GitHub CLI) authenticated — used by `wind up` to work with your repos on GitHub; public binary downloads do not require a GitHub login
 - A Wind Stream account with MCP access (token generated in step 2)
 - **Windows Terminal** recommended — `wind surf` / `wind down` use a full-screen raw-mode TUI, which is happiest on ConPTY (Windows Terminal / modern PowerShell). Legacy `conhost` may not render or restore it cleanly.
 
 ## 1. Install the binary
 
-### Standard path
+### Direct download
 
-```powershell
-winget install WindStream.Wind
-```
-
-This becomes the standard path once the winget listing is live — the submission happens after the distribution flip and is manual, so it's **coming, not live yet**. Until then, use the private-phase path below.
-
-### While this repository is private
-
-During pipeline bring-up (and until winget catches up), `windstreamai/wind-cli` is private, so install with `gh` instead:
+Download `wind-windows-x64.exe` and `SHA256SUMS` from
+[Releases](https://github.com/windstreamai/wind-cli/releases) into the same folder.
+Once the repository is public, this needs no GitHub login. Until then, download
+with the authenticated GitHub CLI:
 
 ```powershell
 gh release download <tag> --repo windstreamai/wind-cli --pattern 'wind-windows-x64.exe' --pattern 'SHA256SUMS' --clobber
+```
+
+From the download folder (for either download method):
+
+```powershell
 Unblock-File .\wind-windows-x64.exe          # clears the "downloaded from the internet" block (mark-of-the-web)
 
-# (optional) verify — compare against SHA256SUMS
-(Get-FileHash .\wind-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+# Verify before installing; stop if the checksum differs or is missing.
+$expected = (Get-Content .\SHA256SUMS | Where-Object { $_ -match '  wind-windows-x64\.exe$' }) -replace '  .*$', ''
+$actual = (Get-FileHash .\wind-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+if (-not $expected -or $actual -ne $expected) { throw "wind checksum mismatch" }
 
 # put it on PATH as wind.exe — a folder already on PATH, e.g. %USERPROFILE%\bin
 mkdir $HOME\bin -Force
@@ -64,9 +66,15 @@ wind -v          # the version you installed — a stale wind.exe earlier on PAT
 >   Remove-Item $HOME\bin\wind.old.exe
 >   ```
 
+### winget (pending)
+
+The winget listing requires a separate submission and install verification after
+the distribution repos become public. Use the direct download above until that
+listing is live.
+
 ## 2. Connect to Wind Stream
 
-Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup prompts for a token and uses the Codex-specific path when Codex is selected; that path leaves Claude configuration unchanged. Generate a token in Wind Stream under **Settings → MCP Token**, paste it at the prompt, then press **Enter**:
+Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup prompts for a token and uses the Codex-specific path when Codex is selected; that path leaves Claude configuration unchanged. Generate a token in Wind Stream under **Settings → API Tokens**, paste it at the prompt, then press **Enter**:
 
 ```powershell
 wind agent codex   # optional; omit for Claude Code
@@ -145,7 +153,7 @@ See [Getting started](getting-started.md) for the full loop.
 
 ## Notes
 
-- **Updating:** once winget is live, `winget upgrade WindStream.Wind`; until then, repeat the `gh` recipe above — replace `$HOME\bin\wind.exe` with the new build (`Move-Item … -Force`, or rename-then-replace if it's running), then re-run `wind setup` (idempotent). Restart Claude Code after its setup path; Codex reads its user configuration on the next launch. Always check `wind -v` afterward.
+- **Updating:** repeat the download and verification steps above — replace `$HOME\bin\wind.exe` with the new build (`Move-Item … -Force`, or rename-then-replace if it's running), then re-run `wind setup` (idempotent). Restart Claude Code after its setup path; Codex reads its user configuration on the next launch. Always check `wind -v` afterward.
 - **Terminal host:** if the TUI renders garbled or won't restore under legacy `conhost`, switch to **Windows Terminal** (ConPTY).
 - **Troubleshooting:** the readout above (from `wind setup`) is the health check — every `✓` line is confirmation, not just a status. If something's off, `wind doctor` bundles the same state into a diagnostics file for a bug report; it's a snapshot for support, not a replacement for the readout.
 - **`wind factory`:** its verbs run the factory's bash and python scripts and need `bash` and `python3` on PATH (the scripts themselves use `gh`, `curl`, and `jq`) — run them from WSL (or let GitHub Actions run them). `wind factory install` is plain file writing and is expected to work from PowerShell, but has not been exercised there; run it from WSL anyway, so the hook scripts it writes keep their executable bit when committed.
