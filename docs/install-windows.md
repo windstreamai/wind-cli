@@ -74,9 +74,10 @@ listing is live.
 
 ## 2. Connect to Wind Stream
 
-Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup prompts for a token and uses the Codex-specific path when Codex is selected; that path leaves Claude configuration unchanged. Generate a token in Wind Stream under **Settings → API Tokens**, paste it at the prompt, then press **Enter**:
+Installing the binary does not deploy the Wind Stream integration — `wind setup` does. Sign in first with `wind auth login` (the terminal shows an address and a code; approve access in the browser; the credential is protected with DPAPI). Choose Codex first if that is your agent; otherwise Claude Code remains the default. Setup registers a local Wind Stream MCP bridge for the selected agent and uses the Codex-specific path when Codex is selected; that path leaves Claude configuration unchanged. The hooks and uploads still use a token in this release: generate one in Wind Stream under **Settings → API Tokens** and store it with `wind auth login --token`:
 
 ```powershell
+wind auth login
 wind agent codex   # optional; omit for Claude Code
 wind setup
 ```
