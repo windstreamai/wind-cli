@@ -6,7 +6,7 @@ wind (the binary distributed from this repository) is proprietary software and
 part of the Wind Stream Platform. Your download, installation, and use of it are
 governed by the Wind Stream Terms of Service:
 
-**https://windstream.ai/terms-of-service**
+**https://windstream.ai/legal/terms-of-service**
 
 By downloading, installing, or using wind, you agree to those terms. If you do
 not agree, do not install or use it.
