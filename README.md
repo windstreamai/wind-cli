@@ -8,6 +8,11 @@ It sets up the session, and returns traces and surfaces your retrospective to Wi
 This repository is for the released binaries
 ([Releases](../../releases)) only and is written by Wind Stream's publish pipeline.
 
+## Connect with your coding agent
+
+Use the [focused setup guide](docs/agents.md) with Claude Code or Codex in your
+repository. The guide checks the installed release before attempting setup.
+
 ## Install
 
 **macOS / Linux (Homebrew)** — available once the distribution repos are public:

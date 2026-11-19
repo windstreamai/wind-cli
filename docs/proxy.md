@@ -1,5 +1,7 @@
 # wind proxy
 
+Wind Proxy requires a REST credential for an Enterprise organization with Proxy enabled.
+
 Shadow one service behind another and let Wind Stream score how far apart they are.
 
 You have two versions of a service: the one you run today and the one that should replace it. Point your application at `wind proxy` instead. It answers every request from one of them (the **serve** upstream), quietly asks the other (the **shadow** upstream) the same question, and counts where they differ. Wind Stream scores the window on /evals as `<service>-window-parity`: how many calls diverged, how much of the traffic was actually compared, and whether enough calls were seen to mean anything.

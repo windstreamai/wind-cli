@@ -8,29 +8,25 @@ wind — Wind Stream CLI
 Usage:
   wind <command> [args]
 
-Core commands
-  up         write  Open or create a session on a release or feature branch
-  surf       write  Deliberate with Wind Stream in your terminal
-  down       write  Write a retrospective for this session
-  open       read   Open this session's Wind Stream page — or any Wind Stream id — in the browser
-
-Setup commands
+Setup
   setup      write  Set up wind on this machine
   auth       write  Manage Wind Stream OAuth connections or explicit PAT credentials
-  mcp        write  Run the local OAuth MCP bridge or print its secret-free configuration
-  agent      write  Show or set the default coding agent
-  connect    write  Connect this repo to a Wind Stream session
   status     read   Show readiness of installed coding tools
-  doctor     write  Capture diagnostics for a bug report
 
-Additional commands
+Coding Agent
+  agent      write  Show or set the default coding agent
+  up         write  Open or create a session on a release or feature branch
+  down       write  Write a retrospective for this session
+
+Additional
   bind       write  Persist the Wind Stream session id to the session manifest
-  eval       write  Publish eval envelopes and build their Outcomes
-  attach     write  Upload images, Markdown, text, and logs to the bound Wind Stream session
+  connect    write  Connect this repo to a Wind Stream session
+  doctor     write  Capture diagnostics for a bug report
+  mcp        write  Run the local OAuth MCP bridge or print its secret-free configuration
+  open       read   Open this session's Wind Stream page — or any Wind Stream id — in the browser
+  surf       write  Deliberate with Wind Stream in your terminal
   sync       write  Deliver what is waiting to upload, or see why it is waiting
   trace      read   Inspect wind's system trace, or brief this seat's agent sessions
-  proxy      write  Shadow one service behind another, record it as a set, replay the set, and score the parity window on Wind Stream
-  factory    write  Run the Wind Stream software factory: brief → issue → coding agent → gate → review handoff
 
 Learn more
   wind <command> --help    Show usage and flags for a command
@@ -43,7 +39,9 @@ Global flags (any position)
 Effect column: read  leaves nothing behind · write  records, queues, or changes something (details on each command's --help)
 ```
 
-Run `wind` with no arguments, `--help`, `-h`, or `help` to print this same index. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by coding-agent lifecycle hooks — but `wind help hook` still documents it.
+Run `wind` with no arguments, `--help`, `-h`, or `help` to print the index. The example above shows signed-out help. For plan-limited commands, Wind checks the grants of the organization associated with your REST credential. This applies to the index, individual help pages and command suggestions. Each command's usage grammar and flags live on its own help page: `wind <command> --help` (or `-h`, or `wind help <command>`). An unrecognized command prints `unknown command: <cmd>` followed by the index, and exits 1. `wind hook` is deliberately absent from the index — it's [plumbing](#plumbing), invoked by coding-agent lifecycle hooks — but `wind help hook` still documents it.
+
+Setup and Coding Agent follow workflow order. Enterprise and Additional list commands alphabetically. Factory and Enterprise appear when your credential grants access to a command in that section.
 
 ## Global flags: `--tui` and `--no-tui`
 
@@ -195,6 +193,8 @@ wind eval outcome show <family|outcome-id>
 wind eval outcome next <family|outcome-id> [<family>…] --statement <text> --exit-condition <text>
 ```
 
+`wind eval publish` requires Enterprise Data access on the platform. An unavailable ingest endpoint (404) exits 1 without retrying or spooling; the CLI reports that ingestion is unavailable for the organization or deployment.
+
 `wind eval publish` ships an eval-envelope NDJSON file to Wind Stream — eval results your harness wrote, one JSON event per line (`eval.charter`, `eval.run`, `eval.score`), delivered on the same lane wind's own traces ride, under the same stored token. What wind adds over a raw POST is provenance: each `eval.run` line is stamped with where the run came from — the bound Wind Stream session, branch, commit, release, repo, the git user as actor, the lane (`local` at a terminal, `ci` otherwise), and `wind-cli` as the runner. Stamping is fill-absent: a value the file already carries always wins, so a CI sender's own stamps are never overwritten — and every other line reaches Wind Stream byte-exact; wind parses only what it stamps. What it can't stamp it names rather than drops silently — `provenance absent: ws_session_id (no wind manifest)` — and publishes anyway: absent is valid, silent isn't. You don't need to be in a wind worktree, or even a git repo — each provenance field degrades independently.
 
 - `<file>` — required. The envelope file: every non-blank line a JSON object, with exactly one eval family across its `eval.charter`/`eval.run` lines. A malformed line, a missing or mixed family, or a family that isn't slug-shaped is refused by name before anything is sent — as is a file over the pipe's limits (5,000 events, 8 MB), which needs splitting first.
@@ -223,6 +223,8 @@ Outcomes are an entitled feature, and an organization without it gets the surfac
 Exit (`outcome`): 0 when the Outcome was created and linked (`frame`, `next`), when a read returned one (`show`), or when `show` found nothing linked to a family — the read succeeded, and the answer is an invitation. 1 for a usage error or a family that isn't slug-shaped; for a missing `--statement` or `--exit-condition`; for a token that's missing, expired, or rejected (`wind auth login`); for feeding forward from an Outcome that isn't closed, or from a family with nothing to inherit from; for an `outcome-id` that genuinely isn't there; for the entitlement refusal above; and for a read or write that failed — including a create that landed but couldn't be linked, which names the unlinked Outcome's id instead of silently retrying.
 
 ## wind proxy
+
+Wind Proxy requires an Enterprise organization with Proxy enabled. Wind verifies the grant before showing help or running a subcommand, including local recording and replay.
 
 ```bash
 wind proxy init <service> --serve <url> --shadow <url> [--route "GET /path/:id"]… [--window <id>] [--coverage-min <0..1>] [--volume-floor <n>] [--port <n>] [--force]
@@ -277,6 +279,29 @@ Exit (`replay`): 1 for bad arguments, a set that fails integrity, no target, a t
 
 ## wind factory
 
+GitHub build entry (requires a platform advertising `build.start`):
+
+```bash
+wind factory build acme/app#123
+wind factory build acme/app#123 --json
+wind factory build https://github.com/acme/app/pull/456 --instructions 'Address the review'
+wind factory build status <build-id>
+wind factory build resume <build-id>
+wind factory build abort <build-id>
+```
+
+Build commands print a readable summary by default. Add `--json` to build, status,
+resume or abort for the complete, unchanged response object.
+
+The CLI saves a request ID before submission and reuses it for the same source,
+intent, identity and environment after a lost response. Use `--request-id <id>`
+to explicitly name separate intent. The returned build ID is shared by API, MCP
+and website. Accepted means durably recorded, not that execution has started;
+repository readiness and existing owner plan approval still apply. Same-repository
+PRs continue from a pinned head; changed heads and unsupported fork continuation
+are refused explicitly. No command manufactures owner approval.
+
+
 ```bash
 wind factory install [--into <dir>] [--force]
 wind factory intake | dispatch | sweep | gate-sweep | health | charters | selftest
@@ -313,6 +338,8 @@ Variables the scripts read: `WINDSTREAM_MCP_TOKEN`, `FACTORY_ASSIGN_TOKEN` (secr
 Exit: 1 with a usage line for an unknown verb, a wrong argument count, a PR or issue number that is not a number, a repository that is not `owner/repo`, a session id that is not `session-<id>`, or an `agent-log` / `otel` operation the script does not have; 1 (message on stderr) when `bash` or `python3` is missing (a missing `gh`, `curl`, or `jq` surfaces as the script's own exit code), or the scripts cannot be unpacked under `~/.windstream`; for `install` and `scripts`, 1 if any file could not be written (the others still land), else 0. For every scripted verb, the script's own exit code.
 
 ## wind attach
+
+Wind Attach requires a REST credential for an Enterprise organization with Attach enabled. Wind checks the grant before reading the files.
 
 ```bash
 wind attach <file>... [--session <ref>] [--md]
@@ -448,10 +475,15 @@ Exit: 1 with a usage line for bad arguments, if you're not inside a git repo, or
 ## wind setup
 
 ```bash
-wind setup [--binary <absolute path>]
+wind setup [--binary <absolute path>] [--connection <id> --organization <id>]
 ```
 
-`wind setup` configures the coding agent selected by `wind agent`. After `wind auth login`, it registers the local OAuth MCP bridge using the installed wind binary. The registration contains only connection, organization and deployment references; credentials remain in wind's store. A single-organization connection needs no further choice. Prepared work uses its pinned connection even if the login default has changed. Multi-organization work requires `wind auth use --organization <id>` before setup.
+`wind setup` configures the coding agent selected by `wind agent`. After `wind auth login`, it registers the local OAuth MCP bridge using the installed wind binary. The registration contains only connection, organization and deployment references; credentials remain in wind's store. A single-organization connection needs no further choice. Prepared work uses its pinned connection even if the login default has changed. For a nondefault connection saved by `wind onboard`, pass both `--connection <id>`
+and `--organization <id>` to setup. These select the approved OAuth bridge without
+changing the default connection or rebinding existing work. The organization must
+belong to that connection, and an existing worktree pin must match both identifiers.
+Without explicit selection, multi-organization prepared work requires
+`wind auth use --organization <id>` before setup.
 
 - **Claude Code (the compatibility default):** registers SessionStart/SessionEnd hooks, deploys `windstream-*` slash commands to `~/.claude/commands`, and registers the user-scoped Wind Stream MCP.
 - **Codex:** registers the Wind Stream MCP, installs lifecycle hooks in `~/.codex/hooks.json`, and deploys `$windstream-connect` to `~/.agents/skills/windstream-connect`. Codex requires a one-time review/trust action from `/hooks`; setup reports installation, not trust.
@@ -462,7 +494,7 @@ Without an OAuth connection, setup retains its PAT flow: it reads or prompts for
 
 The OAuth readout describes cached credentials, not live authorization. It reports PAT readiness separately because REST commands, lifecycle uploads and `wind up`'s Codex launch preflight still require a PAT. OAuth setup does not open a sign-in browser. Run `wind auth login --token` separately when those PAT-dependent operations are needed.
 
-`--binary <absolute path>` selects which installation the agent should use when a native and a Homebrew copy coexist (find them with `wind doctor --installations`). The path must carry a verified native or Homebrew receipt and be byte-identical to the running build; prefer a stable alias such as `/opt/homebrew/bin/wind` over a versioned Cellar path, and run setup from the intended copy when builds differ. The choice is saved in `~/.windstream/config.json` before setup repairs the selected agent's hooks and OAuth MCP path, and later setup runs revalidate it, stopping if the file is missing, changes owner, or differs from the running build. Repairs preserve OAuth connection, organization and deployment pins, mixed user hook handlers, and higher Claude timeouts; custom or conflicting registrations still need manual repair. It does not change PATH or uninstall either copy.
+`--binary <absolute path>` selects which installation the agent should use when a native and a Homebrew copy coexist (find them with `wind doctor --installations`). The path must carry a verified native or Homebrew receipt and be byte-identical to the running build; prefer a stable alias such as `/opt/homebrew/bin/wind` over a versioned Cellar path, and run setup from the intended copy when builds differ. Without `--binary` or a saved selection, a Homebrew-owned wind registers its keg-independent `<prefix>/opt/wind/bin/wind` alias rather than the versioned keg, so hooks and the MCP bridge survive `brew upgrade`; a native wind registers its own path. The choice is saved in `~/.windstream/config.json` before setup repairs the selected agent's hooks and OAuth MCP path, and later setup runs revalidate it, stopping if the file is missing, changes owner, or differs from the running build. Repairs preserve OAuth connection, organization and deployment pins, mixed user hook handlers, and higher Claude timeouts; custom or conflicting registrations still need manual repair. It does not change PATH or uninstall either copy.
 
 It prints a readiness readout when it's done — Wind Stream, the selected connected agent, and Git/GitHub, each line marked with a check or a warning — so you can see at a glance what's connected and what still needs attention.
 
@@ -577,7 +609,7 @@ Exit: 0, or 1 for help on a command that doesn't exist (`wind help bogus` — th
 
 ## Plumbing
 
-These are normally run *for* you — wind's own hooks invoke `wind hook`, and the selected agent's connect command or skill runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional commands in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
+These are normally run *for* you — wind's own hooks invoke `wind hook`, and the selected agent's connect command or skill runs `wind bind` — though `bind` and `trace` are ordinary commands you can also type yourself (they appear under Additional in the index for that reason; `hook` doesn't). `wind trace` in particular is genuinely useful to reach for when you want to see what a run actually did.
 
 - **`wind hook <session-start|session-end|session-end-spool|drain>`** — invoked by the lifecycle hooks `wind setup` registers. Reads the hook's JSON off stdin; at session start, when the worktree has a manifest, writes the session binding and emits an orientation block to stdout (the manifest contents and two Verify lines for the current branch and working directory) so every agent session starts with its Wind Stream context in view — without a manifest, session start does nothing. Only the manifest fields wind recognizes are relayed, and their values pass the same secret-redaction as wind's traces; anything dropped or unrenderable is called out in the block itself (a count, never the raw content), with the details in `wind trace`. Claude's `session-end` uploads within its hook budget or spools on failure. Codex's internal `session-end-spool` performs no network work: it durably spools, writes a trace-ready marker, and returns within Codex's three-second ceiling; the parent `wind up` process drains the spool after Codex exits. Always exits 0 — a lifecycle hook must never crash your coding session, so every internal failure is swallowed rather than surfaced as a nonzero exit. `wind hook --selftest` runs a quick manual check instead (git, manifest, token, API reachability) and prints `[ok]`/`[FAIL]` lines — the one case here that exits 1, if a check fails. At session start it also spawns one detached, lock-guarded `wind hook drain` child — also plumbing, spawned automatically, never something you run yourself — that flushes every kind waiting in the home-level spool queues (`~/.windstream/spools/`; [`wind sync`](#wind-sync) is the command form of the same queue). No upload happens inside a hook budget, so a trace post at API scale and a conversation reply at LLM latency both finish without delaying your session.
 - **`wind bind <ws_session_id> [--url <url>]`** — run by `/windstream-connect` once it has resolved (or created) the Wind Stream session for this worktree, to persist that id — and optionally its URL — into `.session-state.json`. The ref is normalized at this boundary: `session-<id>` passes through, a pasted session URL has its id extracted, and a bare id gets the prefix — anything else is refused, naming the three shapes, so a ref that can't be read is caught here rather than becoming an upload that silently goes nowhere. What lands in the manifest is always the canonical `session-<id>`. In a feature session it also re-checks the branch name against origin and may print a non-fatal warning (see [Feature sessions](#feature-sessions-feature-and-continue)); the exit code is unaffected either way. Exits 1 with a usage line for bad arguments, or if there's no manifest here yet (run `wind up` first); 0 on success.

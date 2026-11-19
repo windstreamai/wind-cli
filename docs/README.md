@@ -16,6 +16,7 @@ wind up <release> my-feature
 
 | Guide | What's in it |
 |-------|--------------|
+| [Connect your coding agent](agents.md) | Focused agent-led setup and connection verification |
 | [Install (macOS / Linux)](install.md) | Binary install, wind setup, verification |
 | [Install (Windows)](install-windows.md) | PowerShell-first install, Windows gotchas |
 | [Getting started](getting-started.md) | The session lifecycle: up → work → down |
